@@ -3,7 +3,7 @@ import Navbar from "~/components/Navbar";
 import FileUploader from "~/components/FileUploader";
 import { useAppStore } from "~/lib/store";
 import { useNavigate } from "react-router";
-import { convertPdfToImage } from "~/lib/pdf2img";
+import { convertPdfToImage, extractTextFromPdf } from "~/lib/pdf2img";
 import { generateUUID } from "~/lib/utils";
 import { prepareInstructions } from "../../constants";
 import { useI18nStore } from "~/lib/i18n";
@@ -38,53 +38,62 @@ const Upload = () => {
     }) => {
         setIsProcessing(true);
 
-        setStatusText(t.upload.statusUploading);
-        const uploadedFile = await fs.upload([file]);
-        if (!uploadedFile) return setStatusText(t.upload.errorUploadFile);
-
-        setStatusText(t.upload.statusConverting);
-        const imageFile = await convertPdfToImage(file);
-        if (!imageFile.file) return setStatusText(t.upload.errorConvertPdf);
-
-        setStatusText(t.upload.statusUploadingImage);
-        const uploadedImage = await fs.upload([imageFile.file]);
-        if (!uploadedImage) return setStatusText(t.upload.errorUploadImage);
-
-        setStatusText(t.upload.statusPreparing);
-        const uuid = generateUUID();
-        const data = {
-            id: uuid,
-            resumePath: uploadedFile.path,
-            imagePath: uploadedImage.path,
-            companyName,
-            jobTitle,
-            jobDescription,
-            feedback: "",
-        };
-        await kv.set(`resume:${uuid}`, JSON.stringify(data));
-
-        setStatusText(t.upload.statusAnalyzing);
-
-        const feedback = await ai.feedback(
-            uploadedFile.path,
-            prepareInstructions({ jobTitle, jobDescription, language })
-        );
-        if (!feedback) return setStatusText(t.upload.errorAnalyze);
-
-        const feedbackText =
-            typeof feedback.message.content === "string"
-                ? feedback.message.content
-                : feedback.message.content[0].text;
-
         try {
-            data.feedback = JSON.parse(feedbackText);
-        } catch {
-            data.feedback = feedbackText as any;
-        }
+            setStatusText(t.upload.statusUploading);
+            const uploadedFile = await fs.upload([file]);
+            if (!uploadedFile) { setStatusText(t.upload.errorUploadFile); setIsProcessing(false); return; }
 
-        await kv.set(`resume:${uuid}`, JSON.stringify(data));
-        setStatusText(t.upload.statusComplete);
-        navigate(`/resume/${uuid}`);
+            setStatusText(t.upload.statusConverting);
+            const imageFile = await convertPdfToImage(file);
+            if (!imageFile.file) { setStatusText(t.upload.errorConvertPdf); setIsProcessing(false); return; }
+
+            // Extract text from the PDF for genuine ATS content analysis
+            const resumeText = await extractTextFromPdf(file);
+
+            setStatusText(t.upload.statusUploadingImage);
+            const uploadedImage = await fs.upload([imageFile.file]);
+            if (!uploadedImage) { setStatusText(t.upload.errorUploadImage); setIsProcessing(false); return; }
+
+            setStatusText(t.upload.statusPreparing);
+            const uuid = generateUUID();
+            const data = {
+                id: uuid,
+                resumePath: uploadedFile.path,
+                imagePath: uploadedImage.path,
+                companyName,
+                jobTitle,
+                jobDescription,
+                feedback: "",
+            };
+            await kv.set(`resume:${uuid}`, JSON.stringify(data));
+
+            setStatusText(t.upload.statusAnalyzing);
+
+            const feedback = await ai.feedback(
+                uploadedFile.path,
+                prepareInstructions({ jobTitle, jobDescription, language, resumeText })
+            );
+            if (!feedback) { setStatusText(t.upload.errorAnalyze); setIsProcessing(false); return; }
+
+            const feedbackText =
+                typeof feedback.message.content === "string"
+                    ? feedback.message.content
+                    : feedback.message.content[0].text;
+
+            try {
+                data.feedback = JSON.parse(feedbackText);
+            } catch {
+                data.feedback = feedbackText as any;
+            }
+
+            await kv.set(`resume:${uuid}`, JSON.stringify(data));
+            setStatusText(t.upload.statusComplete);
+            navigate(`/resume/${uuid}`);
+        } catch (err) {
+            console.error("Analysis failed:", err);
+            setStatusText(t.upload.errorAnalyze);
+            setIsProcessing(false);
+        }
     };
 
     const handleSubmit = (e: FormEvent<HTMLFormElement>) => {

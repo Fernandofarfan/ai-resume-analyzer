@@ -55,6 +55,11 @@ export interface Translations {
         atsSubImprove: string;
         atsDescription: string;
         atsEncouragement: string;
+        deleteResume: string;
+        deleteConfirmTitle: string;
+        deleteConfirmMessage: string;
+        cancelDelete: string;
+        confirmDelete: string;
         categories: {
             toneAndStyle: string;
             content: string;
@@ -122,6 +127,11 @@ export const translations: Record<Language, Translations> = {
             atsSubImprove: "Requiere Mejoras",
             atsDescription: "Esta puntuación representa el desempeño esperado de tu CV en los sistemas de seguimiento de candidatos (ATS) utilizados por reclutadores.",
             atsEncouragement: "Continúa optimizando tu currículum para maximizar tus posibilidades de superar los filtros ATS y captar la atención de los reclutadores.",
+            deleteResume: "Eliminar CV",
+            deleteConfirmTitle: "¿Eliminar este currículum?",
+            deleteConfirmMessage: "Esta acción no se puede deshacer. Se eliminarán el archivo PDF, la imagen y todo el análisis asociado.",
+            cancelDelete: "Cancelar",
+            confirmDelete: "Eliminar",
             categories: {
                 toneAndStyle: "Tono y Estilo",
                 content: "Contenido y Logros",
@@ -187,6 +197,11 @@ export const translations: Record<Language, Translations> = {
             atsSubImprove: "Needs Improvement",
             atsDescription: "This score represents how well your resume is likely to perform in Applicant Tracking Systems used by employers.",
             atsEncouragement: "Keep refining your resume to improve your chances of getting past ATS filters and into the hands of recruiters.",
+            deleteResume: "Delete Resume",
+            deleteConfirmTitle: "Delete this resume?",
+            deleteConfirmMessage: "This action cannot be undone. The PDF file, preview image, and all analysis data will be permanently deleted.",
+            cancelDelete: "Cancel",
+            confirmDelete: "Delete",
             categories: {
                 toneAndStyle: "Tone & Style",
                 content: "Content & Impact",

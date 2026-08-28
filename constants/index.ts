@@ -1,185 +1,4 @@
-export const resumes: Resume[] = [
-    {
-        id: "1",
-        companyName: "Google",
-        jobTitle: "Frontend Developer",
-        imagePath: "/images/resume_01.png",
-        resumePath: "/resumes/resume-1.pdf",
-        feedback: {
-            overallScore: 85,
-            ATS: {
-                score: 90,
-                tips: [],
-            },
-            toneAndStyle: {
-                score: 90,
-                tips: [],
-            },
-            content: {
-                score: 90,
-                tips: [],
-            },
-            structure: {
-                score: 90,
-                tips: [],
-            },
-            skills: {
-                score: 90,
-                tips: [],
-            },
-        },
-    },
-    {
-        id: "2",
-        companyName: "Microsoft",
-        jobTitle: "Cloud Engineer",
-        imagePath: "/images/resume_02.png",
-        resumePath: "/resumes/resume-2.pdf",
-        feedback: {
-            overallScore: 55,
-            ATS: {
-                score: 90,
-                tips: [],
-            },
-            toneAndStyle: {
-                score: 90,
-                tips: [],
-            },
-            content: {
-                score: 90,
-                tips: [],
-            },
-            structure: {
-                score: 90,
-                tips: [],
-            },
-            skills: {
-                score: 90,
-                tips: [],
-            },
-        },
-    },
-    {
-        id: "3",
-        companyName: "Apple",
-        jobTitle: "iOS Developer",
-        imagePath: "/images/resume_03.png",
-        resumePath: "/resumes/resume-3.pdf",
-        feedback: {
-            overallScore: 75,
-            ATS: {
-                score: 90,
-                tips: [],
-            },
-            toneAndStyle: {
-                score: 90,
-                tips: [],
-            },
-            content: {
-                score: 90,
-                tips: [],
-            },
-            structure: {
-                score: 90,
-                tips: [],
-            },
-            skills: {
-                score: 90,
-                tips: [],
-            },
-        },
-    },
-    {
-        id: "4",
-        companyName: "Google",
-        jobTitle: "Frontend Developer",
-        imagePath: "/images/resume_01.png",
-        resumePath: "/resumes/resume-1.pdf",
-        feedback: {
-            overallScore: 85,
-            ATS: {
-                score: 90,
-                tips: [],
-            },
-            toneAndStyle: {
-                score: 90,
-                tips: [],
-            },
-            content: {
-                score: 90,
-                tips: [],
-            },
-            structure: {
-                score: 90,
-                tips: [],
-            },
-            skills: {
-                score: 90,
-                tips: [],
-            },
-        },
-    },
-    {
-        id: "5",
-        companyName: "Microsoft",
-        jobTitle: "Cloud Engineer",
-        imagePath: "/images/resume_02.png",
-        resumePath: "/resumes/resume-2.pdf",
-        feedback: {
-            overallScore: 55,
-            ATS: {
-                score: 90,
-                tips: [],
-            },
-            toneAndStyle: {
-                score: 90,
-                tips: [],
-            },
-            content: {
-                score: 90,
-                tips: [],
-            },
-            structure: {
-                score: 90,
-                tips: [],
-            },
-            skills: {
-                score: 90,
-                tips: [],
-            },
-        },
-    },
-    {
-        id: "6",
-        companyName: "Apple",
-        jobTitle: "iOS Developer",
-        imagePath: "/images/resume_03.png",
-        resumePath: "/resumes/resume-3.pdf",
-        feedback: {
-            overallScore: 75,
-            ATS: {
-                score: 90,
-                tips: [],
-            },
-            toneAndStyle: {
-                score: 90,
-                tips: [],
-            },
-            content: {
-                score: 90,
-                tips: [],
-            },
-            structure: {
-                score: 90,
-                tips: [],
-            },
-            skills: {
-                score: 90,
-                tips: [],
-            },
-        },
-    },
-];
+
 
 export const AIResponseFormat = `
       interface Feedback {
@@ -229,10 +48,12 @@ export const prepareInstructions = ({
     jobTitle,
     jobDescription,
     language = "es",
+    resumeText = "",
 }: {
     jobTitle: string;
     jobDescription: string;
     language?: "es" | "en";
+    resumeText?: string;
 }) => {
     const isSpanish = language === "es";
 
@@ -243,6 +64,10 @@ export const prepareInstructions = ({
       Sé exhaustivo, detallado y profesional en tus explicaciones.
       El título del puesto objetivo es: ${jobTitle || "No especificado"}
       La descripción de la oferta laboral es: ${jobDescription || "No especificada"}
+      El contenido de texto extraído del currículum es:
+      --- INICIO CONTENIDO CV ---
+      ${resumeText || "No se pudo extraer texto del documento"}
+      --- FIN CONTENIDO CV ---
       Proporciona todas las sugerencias, explicaciones y consejos (tips) en IDIOMA ESPAÑOL.
       Proporciona la respuesta con el siguiente formato JSON estricto:
       ${AIResponseFormat}
@@ -257,6 +82,10 @@ export const prepareInstructions = ({
       If provided, take the job description into consideration.
       The job title is: ${jobTitle || "Not specified"}
       The job description is: ${jobDescription || "Not specified"}
+      The extracted resume text content is:
+      --- START RESUME CONTENT ---
+      ${resumeText || "No text could be extracted from the document"}
+      --- END RESUME CONTENT ---
       Provide all feedback, explanations and tips in ENGLISH.
       Provide the feedback using the following format:
       ${AIResponseFormat}

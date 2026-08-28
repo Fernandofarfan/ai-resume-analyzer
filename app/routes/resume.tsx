@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router";
+import { Link, useParams, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { useAppStore } from "~/lib/store";
 import Summary from "~/components/Summary";
@@ -16,11 +16,16 @@ const Resume = () => {
     const { fs, kv } = useAppStore();
     const { t } = useI18nStore();
     const { id } = useParams();
+    const navigate = useNavigate();
     const [imageUrl, setImageUrl] = useState("");
     const [resumeUrl, setResumeUrl] = useState("");
     const [feedback, setFeedback] = useState<Feedback | null>(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     useEffect(() => {
+        let resUrl: string | null = null;
+        let imgUrl: string | null = null;
+
         const loadResume = async () => {
             const resume = await kv.get(`resume:${id}`);
 
@@ -32,19 +37,35 @@ const Resume = () => {
             if (!resumeBlob) return;
 
             const pdfBlob = new Blob([resumeBlob], { type: "application/pdf" });
-            const resUrl = URL.createObjectURL(pdfBlob);
+            resUrl = URL.createObjectURL(pdfBlob);
             setResumeUrl(resUrl);
 
             const imageBlob = await fs.read(data.imagePath);
             if (!imageBlob) return;
-            const imgUrl = URL.createObjectURL(imageBlob);
+            imgUrl = URL.createObjectURL(imageBlob);
             setImageUrl(imgUrl);
 
             setFeedback(data.feedback);
         };
 
         loadResume();
+
+        return () => {
+            if (resUrl) URL.revokeObjectURL(resUrl);
+            if (imgUrl) URL.revokeObjectURL(imgUrl);
+        };
     }, [id]);
+
+    const handleDelete = async () => {
+        const resume = await kv.get(`resume:${id}`);
+        if (resume) {
+            const data = JSON.parse(resume);
+            await fs.delete(data.resumePath);
+            await fs.delete(data.imagePath);
+        }
+        await kv.delete(`resume:${id}`);
+        navigate("/");
+    };
 
     return (
         <main className="!pt-0 min-h-screen bg-gray-50/50">
@@ -56,8 +77,46 @@ const Resume = () => {
                     </span>
                 </Link>
 
-                <LanguageSelector />
+                <div className="flex items-center gap-3">
+                    <LanguageSelector />
+                    <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-full transition-all duration-200 cursor-pointer"
+                        title={t.resume.deleteResume}
+                    >
+                        <img src="/icons/cross.svg" alt="delete" className="w-3 h-3" />
+                        <span>{t.resume.deleteResume}</span>
+                    </button>
+                </div>
             </nav>
+
+            {/* Delete confirmation modal */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl p-8 max-w-sm mx-4 shadow-xl animate-in fade-in duration-200">
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">{t.resume.deleteConfirmTitle}</h3>
+                        <p className="text-gray-600 mb-6">{t.resume.deleteConfirmMessage}</p>
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteConfirm(false)}
+                                className="flex-1 px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors cursor-pointer"
+                            >
+                                {t.resume.cancelDelete}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDelete}
+                                className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-full transition-colors cursor-pointer"
+                            >
+                                {t.resume.confirmDelete}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="flex flex-row w-full max-lg:flex-col-reverse">
                 <section className="feedback-section bg-[url('/images/bg-small.svg')] bg-cover h-[100vh] sticky top-0 items-center justify-center">
                     {imageUrl && resumeUrl && (

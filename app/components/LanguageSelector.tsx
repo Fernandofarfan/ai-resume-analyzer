@@ -13,6 +13,7 @@ const LanguageSelector: React.FC<LanguageSelectorProps> = ({ className = "" }) =
             <button
                 type="button"
                 onClick={() => setLanguage("es")}
+                aria-label="Cambiar idioma a Español"
                 className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200 cursor-pointer ${
                     language === "es"
                         ? "bg-white text-blue-600 shadow-xs scale-105"
@@ -26,6 +27,7 @@ const LanguageSelector: React.FC<LanguageSelectorProps> = ({ className = "" }) =
             <button
                 type="button"
                 onClick={() => setLanguage("en")}
+                aria-label="Switch language to English"
                 className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200 cursor-pointer ${
                     language === "en"
                         ? "bg-white text-blue-600 shadow-xs scale-105"

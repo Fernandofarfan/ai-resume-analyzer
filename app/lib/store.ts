@@ -175,23 +175,93 @@ const listLocalBlobs = async (): Promise<FSItem[]> => {
 };
 
 // Intelligent Local Bilingual ATS Feedback Generator
-const generateMockFeedback = (instructionMessage: string): Feedback => {
+// Heuristic ATS Analysis Engine
+const analyzeResumeContent = (instructionMessage: string): Feedback => {
     const isSpanish = /IDIOMA ESPAÑOL|puesto objetivo|currículum/i.test(instructionMessage);
 
+    // 1. Extract job title
     let jobTitle = isSpanish ? "Puesto Profesional" : "Professional Role";
-
     const jobTitleMatch = instructionMessage.match(/(?:The job title is|El título del puesto objetivo es):\s*([^\n\r]*)/i);
     if (jobTitleMatch && jobTitleMatch[1]?.trim() && !jobTitleMatch[1].includes("No especificado") && !jobTitleMatch[1].includes("Not specified")) {
         jobTitle = jobTitleMatch[1].trim();
     }
 
+    // 2. Extract job description
     const jobDescMatch = instructionMessage.match(/(?:The job description is|La descripción de la oferta laboral es):\s*([^\n\r]*)/i);
     const jobDesc = jobDescMatch && jobDescMatch[1]?.trim() && !jobDescMatch[1].includes("No especificada") && !jobDescMatch[1].includes("Not specified")
         ? jobDescMatch[1].trim()
         : "";
 
-    const overall = Math.floor(Math.random() * 10) + 85;
-    const atsScore = Math.floor(Math.random() * 8) + 88;
+    // 3. Extract resume text
+    let resumeText = "";
+    const resumeTextMatch = instructionMessage.match(/(?:--- INICIO CONTENIDO CV ---|--- START RESUME CONTENT ---)([\s\S]*?)(?:--- FIN CONTENIDO CV ---|--- END RESUME CONTENT ---)/i);
+    if (resumeTextMatch && resumeTextMatch[1]) {
+        resumeText = resumeTextMatch[1].trim();
+    }
+
+    const textLower = resumeText.toLowerCase();
+    const wordCount = resumeText ? resumeText.split(/\s+/).filter(Boolean).length : 0;
+
+    // --- Heuristic 1: Structure & Sections ---
+    const hasContact = /@|linkedin|github|telefono|teléfono|phone|email|correo|\+?\d{8,}/i.test(resumeText);
+    const hasExperience = /experiencia|experience|trayectoria|work history|historial laboral|empleo/i.test(textLower);
+    const hasEducation = /educaci[oó]n|education|universidad|university|licenciatura|grado|bachelor|master|m[aá]ster/i.test(textLower);
+    const hasSkills = /habilidades|skills|aptitudes|conocimientos|technologies|tecnolog[ií]as|herramientas|stack/i.test(textLower);
+    const hasSummary = /resumen|summary|perfil|profile|sobre m[ií]|about me|objetivo/i.test(textLower);
+
+    let structureScore = 40;
+    if (hasContact) structureScore += 12;
+    if (hasExperience) structureScore += 16;
+    if (hasEducation) structureScore += 12;
+    if (hasSkills) structureScore += 12;
+    if (hasSummary) structureScore += 8;
+    structureScore = Math.min(96, Math.max(35, structureScore));
+
+    // --- Heuristic 2: Content & Metrics ---
+    const metricMatches = resumeText.match(/\d+[\s]*(?:%|k|m|usd|eur|\$|a[ñn]os|years|usuarios|users|clientes|clients|ventas|sales|horas|hours|projects|proyectos)/gi) || [];
+    const metricCount = metricMatches.length;
+
+    let contentScore = 50;
+    if (wordCount >= 200) contentScore += 15;
+    else if (wordCount >= 100) contentScore += 8;
+    if (metricCount >= 4) contentScore += 25;
+    else if (metricCount >= 2) contentScore += 15;
+    else if (metricCount >= 1) contentScore += 8;
+    contentScore = Math.min(95, Math.max(30, contentScore));
+
+    // --- Heuristic 3: Tone & Action Verbs ---
+    const actionVerbsEs = /lider[eé]|desarroll[eé]|dise[ñn][eé]|implement[eé]|optimiz[eé]|coordin[eé]|cre[eé]|aument[eé]|reduj[eé]|gestion[eé]/gi;
+    const actionVerbsEn = /led|developed|designed|implemented|optimized|coordinated|created|increased|reduced|managed|engineered|built/gi;
+    const actionVerbCount = (resumeText.match(isSpanish ? actionVerbsEs : actionVerbsEn) || []).length;
+
+    const passivePhrases = /responsable de|ayud[eé] a|particip[eé] en|assisted with|helped to|responsible for/gi;
+    const passiveCount = (resumeText.match(passivePhrases) || []).length;
+
+    let toneScore = 60;
+    if (actionVerbCount >= 4) toneScore += 25;
+    else if (actionVerbCount >= 2) toneScore += 15;
+    else if (actionVerbCount >= 1) toneScore += 8;
+    if (passiveCount > 2) toneScore -= 10;
+    toneScore = Math.min(96, Math.max(35, toneScore));
+
+    // --- Heuristic 4: Skills & Keywords ---
+    let matchedKeywords = 0;
+    if (jobDesc) {
+        const descWords = jobDesc.toLowerCase().split(/\W+/).filter(w => w.length > 3);
+        const uniqueDescWords = Array.from(new Set(descWords));
+        const matches = uniqueDescWords.filter(w => textLower.includes(w));
+        matchedKeywords = matches.length;
+    }
+
+    let skillsScore = 60;
+    if (hasSkills) skillsScore += 15;
+    if (matchedKeywords >= 5) skillsScore += 20;
+    else if (matchedKeywords >= 2) skillsScore += 10;
+    skillsScore = Math.min(98, Math.max(35, skillsScore));
+
+    // --- ATS Overall Score ---
+    const atsScore = Math.round((structureScore * 0.3) + (skillsScore * 0.3) + (contentScore * 0.25) + (toneScore * 0.15));
+    const overall = Math.round((atsScore * 0.35) + (contentScore * 0.25) + (structureScore * 0.2) + (toneScore * 0.1) + (skillsScore * 0.1));
 
     if (isSpanish) {
         return {
@@ -199,84 +269,146 @@ const generateMockFeedback = (instructionMessage: string): Feedback => {
             ATS: {
                 score: atsScore,
                 tips: [
-                    {
-                        type: "good",
-                        tip: "Estructura limpia y encabezados estándar que facilitan el análisis por los principales sistemas ATS.",
-                    },
-                    {
-                        type: "good",
-                        tip: `Excelente densidad de palabras clave orientadas al rol de ${jobTitle}.`,
-                    },
-                    {
-                        type: "improve",
-                        tip: "Cuantifica tus logros con métricas concretas (% de mejora, tiempo o costos ahorrados).",
-                    },
-                    {
-                        type: "improve",
-                        tip: "Asegúrate de mantener un formato cronológico inverso homogéneo en toda tu trayectoria.",
-                    },
+                    hasExperience && hasEducation
+                        ? {
+                            type: "good",
+                            tip: "Encabezados estándar y estructura compatible con los analizadores ATS más utilizados.",
+                        }
+                        : {
+                            type: "improve",
+                            tip: "Asegúrate de incluir secciones claramente tituladas: 'Experiencia Laboral', 'Educación' y 'Habilidades'.",
+                        },
+                    matchedKeywords >= 3
+                        ? {
+                            type: "good",
+                            tip: `Buena densidad de palabras clave alineadas con el puesto de ${jobTitle}.`,
+                        }
+                        : {
+                            type: "improve",
+                            tip: `Incorpora más términos y requisitos específicos del rol de ${jobTitle} a lo largo de tu CV.`,
+                        },
+                    metricCount >= 2
+                        ? {
+                            type: "good",
+                            tip: "Presencia de logros cuantificados mediante métricas y cifras concretas.",
+                        }
+                        : {
+                            type: "improve",
+                            tip: "Cuantifica tus responsabilidades con resultados medibles (% de eficiencia, tiempo o costos ahorrados).",
+                        },
+                    hasContact
+                        ? {
+                            type: "good",
+                            tip: "Datos de contacto identificables para los reclutadores.",
+                        }
+                        : {
+                            type: "improve",
+                            tip: "Verifica que tu correo electrónico, teléfono y enlace a LinkedIn sean fácilmente legibles.",
+                        },
                 ],
             },
             toneAndStyle: {
-                score: 88,
+                score: toneScore,
                 tips: [
-                    {
-                        type: "good",
-                        tip: "Verbos de Acción Contundentes",
-                        explanation: "Las viñetas inician con verbos activos que demuestran liderazgo y autonomía profesional.",
-                    },
-                    {
-                        type: "improve",
-                        tip: "Evitar Expresiones Pasivas",
-                        explanation: "Reemplaza frases como 'Responsable de' o 'Ayudé a' por verbos precisos como 'Lideré', 'Desarrollé' u 'Optimicé'.",
-                    },
+                    actionVerbCount >= 2
+                        ? {
+                            type: "good",
+                            tip: "Verbos de Acción Efectivos",
+                            explanation: "Tus viñetas utilizan verbos contundentes que transmiten proactividad y autonomía.",
+                        }
+                        : {
+                            type: "improve",
+                            tip: "Utilizar Verbos de Acción Fuertes",
+                            explanation: "Comienza cada viñeta con verbos como 'Lideré', 'Desarrollé', 'Implementé' u 'Optimicé'.",
+                        },
+                    passiveCount > 0
+                        ? {
+                            type: "improve",
+                            tip: "Evitar Lenguaje Pasivo",
+                            explanation: "Reemplaza fórmulas como 'Responsable de' o 'Ayudé a' por acciones directas y asertivas.",
+                        }
+                        : {
+                            type: "good",
+                            tip: "Tono Profesional y Directo",
+                            explanation: "El lenguaje utilizado es asertivo y centrado en la ejecución.",
+                        },
                 ],
             },
             content: {
-                score: 86,
+                score: contentScore,
                 tips: [
-                    {
-                        type: "good",
-                        tip: "Experiencia Pertinente",
-                        explanation: `Tu historial profesional destaca competencias técnicas acordes a los requerimientos de ${jobTitle}.`,
-                    },
-                    {
-                        type: "improve",
-                        tip: "Destacar Resultados Concretos",
-                        explanation: "Vincula cada responsabilidad importante con el impacto o valor generado para el negocio.",
-                    },
+                    metricCount >= 2
+                        ? {
+                            type: "good",
+                            tip: "Impacto Cuantificado",
+                            explanation: "Respaldaste tus responsabilidades con métricas numéricas concretas.",
+                        }
+                        : {
+                            type: "improve",
+                            tip: "Añadir Métricas y Resultados",
+                            explanation: "Asocia cada función principal a un indicador de éxito (ej. porcentaje de mejora, reducción de tiempos).",
+                        },
+                    wordCount >= 200
+                        ? {
+                            type: "good",
+                            tip: "Profundidad de Contenido Adecuada",
+                            explanation: "El nivel de detalle describe con claridad tus responsabilidades profesionales.",
+                        }
+                        : {
+                            type: "improve",
+                            tip: "Ampliar Detalle de Experiencias",
+                            explanation: "Tu CV es breve. Explica con mayor detalle los proyectos y tecnologías que dominas.",
+                        },
                 ],
             },
             structure: {
-                score: 92,
+                score: structureScore,
                 tips: [
+                    hasExperience && hasSkills
+                        ? {
+                            type: "good",
+                            tip: "Organización Modular Clara",
+                            explanation: "Las secciones principales están claramente diferenciadas para una lectura ágil.",
+                        }
+                        : {
+                            type: "improve",
+                            tip: "Completar Secciones Fundamentales",
+                            explanation: "Asegúrate de estructurar el CV con: Perfil, Experiencia Laboral, Educación y Habilidades.",
+                        },
                     {
                         type: "good",
-                        tip: "Jerarquía Visual Clara",
-                        explanation: "Separación clara e intuitiva entre Experiencia, Educación y Habilidades técnicas.",
-                    },
-                    {
-                        type: "improve",
-                        tip: "Organización de Habilidades",
-                        explanation: "Agrupa tus conocimientos en categorías (Lenguajes, Frameworks y Herramientas) para una lectura rápida.",
+                        tip: "Formato Cronológico Estándar",
+                        explanation: "La presentación facilita la comprensión inmediata de tu evolución profesional.",
                     },
                 ],
             },
             skills: {
-                score: 89,
+                score: skillsScore,
                 tips: [
-                    {
-                        type: "good",
-                        tip: "Stack Tecnológico Demandado",
-                        explanation: "Incluye herramientas modernas e indispensables para la industria actual.",
-                    },
-                    {
-                        type: "improve",
-                        tip: "Palabras Clave de la Vacante",
-                        explanation: jobDesc
-                            ? `Incorpora términos técnicos clave presentes en la oferta: "${jobDesc.slice(0, 60)}..."`
-                            : `Añade palabras clave específicas y certificaciones demandadas para ${jobTitle}.`,
-                    },
+                    hasSkills
+                        ? {
+                            type: "good",
+                            tip: "Sección de Habilidades Presente",
+                            explanation: "El documento incluye un apartado específico para tus competencias técnicas.",
+                        }
+                        : {
+                            type: "improve",
+                            tip: "Crear Sección de Habilidades",
+                            explanation: "Agrega un bloque dedicado a Habilidades Técnicas, Frameworks y Herramientas.",
+                        },
+                    jobDesc && matchedKeywords >= 3
+                        ? {
+                            type: "good",
+                            tip: "Coincidencia con la Oferta",
+                            explanation: "Detectamos términos clave requeridos por la vacante dentro de tu perfil.",
+                        }
+                        : {
+                            type: "improve",
+                            tip: "Optimizar Palabras Clave",
+                            explanation: jobDesc
+                                ? `Integra términos específicos de la oferta como "${jobDesc.slice(0, 50)}..."`
+                                : `Incluye certificaciones y términos tecnológicos estándar para el rol de ${jobTitle}.`,
+                        },
                 ],
             },
         };
@@ -287,84 +419,146 @@ const generateMockFeedback = (instructionMessage: string): Feedback => {
         ATS: {
             score: atsScore,
             tips: [
-                {
-                    type: "good",
-                    tip: "Clean structure and standard headers facilitate parsing by major ATS platforms.",
-                },
-                {
-                    type: "good",
-                    tip: `Strong keyword density corresponding to ${jobTitle}.`,
-                },
-                {
-                    type: "improve",
-                    tip: "Quantify your achievements with concrete metrics (e.g., % increase, hours saved, revenue).",
-                },
-                {
-                    type: "improve",
-                    tip: "Use standard reverse-chronological format across all employment history.",
-                },
+                hasExperience && hasEducation
+                    ? {
+                        type: "good",
+                        tip: "Standard section headers ensuring high parseability across ATS platforms.",
+                    }
+                    : {
+                        type: "improve",
+                        tip: "Ensure clearly labeled sections: 'Work Experience', 'Education', and 'Skills'.",
+                    },
+                matchedKeywords >= 3
+                    ? {
+                        type: "good",
+                        tip: `Solid keyword alignment matching the role of ${jobTitle}.`,
+                    }
+                    : {
+                        type: "improve",
+                        tip: `Incorporate more target keywords and domain skills corresponding to ${jobTitle}.`,
+                    },
+                metricCount >= 2
+                    ? {
+                        type: "good",
+                        tip: "Strong presence of quantified achievements and measurable metrics.",
+                    }
+                    : {
+                        type: "improve",
+                        tip: "Quantify your achievements with concrete metrics (% improvements, time/cost savings).",
+                    },
+                hasContact
+                    ? {
+                        type: "good",
+                        tip: "Contact information easily identifiable by hiring managers and parsers.",
+                    }
+                    : {
+                        type: "improve",
+                        tip: "Make sure your email, phone number, and LinkedIn URL are prominent and clean.",
+                    },
             ],
         },
         toneAndStyle: {
-            score: 88,
+            score: toneScore,
             tips: [
-                {
-                    type: "good",
-                    tip: "Impactful Action Verbs",
-                    explanation: "Bullet points effectively start with proactive verbs showing strong individual contribution.",
-                },
-                {
-                    type: "improve",
-                    tip: "Eliminate Passive Phrasing",
-                    explanation: "Replace passive phrases like 'Assisted with' or 'Helped to' with definitive verbs like 'Spearheaded' or 'Engineered'.",
-                },
+                actionVerbCount >= 2
+                    ? {
+                        type: "good",
+                        tip: "Strong Action Verbs",
+                        explanation: "Bullet points lead with powerful action verbs conveying autonomy and leadership.",
+                    }
+                    : {
+                        type: "improve",
+                        tip: "Leverage Action Verbs",
+                        explanation: "Start bullet points with definitive verbs like 'Spearheaded', 'Engineered', 'Orchestrated', or 'Optimized'.",
+                    },
+                passiveCount > 0
+                    ? {
+                        type: "improve",
+                        tip: "Eliminate Passive Phrasing",
+                        explanation: "Replace passive phrases like 'Responsible for' or 'Helped with' with active, direct contribution statements.",
+                    }
+                    : {
+                        type: "good",
+                        tip: "Assertive Tone",
+                        explanation: "Resume maintains a direct, professional and achievement-oriented tone.",
+                    },
             ],
         },
         content: {
-            score: 86,
+            score: contentScore,
             tips: [
-                {
-                    type: "good",
-                    tip: "Relevant Experience",
-                    explanation: `Work experience highlights practical competencies aligned with requirements for ${jobTitle}.`,
-                },
-                {
-                    type: "improve",
-                    tip: "Highlight Specific Outcomes",
-                    explanation: "Connect each major responsibility to a measurable outcome or delivered project value.",
-                },
+                metricCount >= 2
+                    ? {
+                        type: "good",
+                        tip: "Quantified Impact",
+                        explanation: "You backed up your responsibilities with tangible numbers and deliverables.",
+                    }
+                    : {
+                        type: "improve",
+                        tip: "Add Quantifiable Metrics",
+                        explanation: "Connect each core responsibility to a tangible business or technical outcome.",
+                    },
+                wordCount >= 200
+                    ? {
+                        type: "good",
+                        tip: "Optimal Detail Depth",
+                        explanation: "The depth of explanations effectively captures your scope of work.",
+                    }
+                    : {
+                        type: "improve",
+                        tip: "Expand Experience Details",
+                        explanation: "Your resume content is brief. Provide more details on technical projects and contributions.",
+                    },
             ],
         },
         structure: {
-            score: 92,
+            score: structureScore,
             tips: [
+                hasExperience && hasSkills
+                    ? {
+                        type: "good",
+                        tip: "Clean Modular Layout",
+                        explanation: "Clear separation between Experience, Education, and Technical Competencies.",
+                    }
+                    : {
+                        type: "improve",
+                        tip: "Organize Core Sections",
+                        explanation: "Ensure standard chronological sections: Summary, Experience, Education, and Skills.",
+                    },
                 {
                     type: "good",
-                    tip: "Intuitive Section Hierarchy",
-                    explanation: "Clear visual hierarchy between Contact Info, Summary, Experience, Education, and Skills.",
-                },
-                {
-                    type: "improve",
-                    tip: "Categorized Skills Section",
-                    explanation: "Categorize skills into Core, Frameworks, and Tools for faster recruiter review.",
+                    tip: "Reverse Chronological Order",
+                    explanation: "Layout provides an immediate, scannable overview of your career progression.",
                 },
             ],
         },
         skills: {
-            score: 89,
+            score: skillsScore,
             tips: [
-                {
-                    type: "good",
-                    tip: "Core Tech Stack",
-                    explanation: "Mentions modern industry tools and technologies essential for the target role.",
-                },
-                {
-                    type: "improve",
-                    tip: "Targeted Keywords",
-                    explanation: jobDesc
-                        ? `Integrate more industry keywords found in the job posting: "${jobDesc.slice(0, 70)}..."`
-                        : `Ensure specific industry terminology matching ${jobTitle} is prominently featured.`,
-                },
+                hasSkills
+                    ? {
+                        type: "good",
+                        tip: "Dedicated Skills Section",
+                        explanation: "Document has a clear area highlighting technical competencies.",
+                    }
+                    : {
+                        type: "improve",
+                        tip: "Create Categorized Skills Section",
+                        explanation: "Group skills into Core Languages, Frameworks, and Tools for faster recruiter evaluation.",
+                    },
+                jobDesc && matchedKeywords >= 3
+                    ? {
+                        type: "good",
+                        tip: "Job Match Alignment",
+                        explanation: "Key keywords from the target job description were successfully found in your profile.",
+                    }
+                    : {
+                        type: "improve",
+                        tip: "Targeted Industry Keywords",
+                        explanation: jobDesc
+                            ? `Incorporate more terminology directly from the job posting: "${jobDesc.slice(0, 60)}..."`
+                            : `Ensure specific industry certifications and tools for ${jobTitle} are prominently featured.`,
+                    },
             ],
         },
     };
@@ -441,12 +635,12 @@ export const useAppStore = create<AppStore>((set, get) => {
         prompt: string | ChatMessage[]
     ): Promise<AIResponse | undefined> => {
         const promptText = typeof prompt === "string" ? prompt : JSON.stringify(prompt);
-        const mock = generateMockFeedback(promptText);
+        const analysis = analyzeResumeContent(promptText);
         return {
             index: 0,
             message: {
                 role: "assistant",
-                content: JSON.stringify(mock),
+                content: JSON.stringify(analysis),
                 refusal: null,
                 annotations: [],
             },
@@ -458,12 +652,12 @@ export const useAppStore = create<AppStore>((set, get) => {
     };
 
     const feedback = async (_path: string, message: string): Promise<AIResponse | undefined> => {
-        const mock = generateMockFeedback(message);
+        const analysis = analyzeResumeContent(message);
         return {
             index: 0,
             message: {
                 role: "assistant",
-                content: JSON.stringify(mock),
+                content: JSON.stringify(analysis),
                 refusal: null,
                 annotations: [],
             },
@@ -570,6 +764,3 @@ export const useAppStore = create<AppStore>((set, get) => {
         clearError: () => set({ error: null }),
     };
 });
-
-// Backward compatibility alias
-export const usePuterStore = useAppStore;
