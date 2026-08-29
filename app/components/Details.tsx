@@ -1,44 +1,12 @@
-import { cn } from "~/lib/utils";
+import { useState } from "react";
 import {
     Accordion,
     AccordionContent,
     AccordionHeader,
     AccordionItem,
 } from "./Accordion";
+import ScoreBadge from "~/components/ScoreBadge";
 import { useI18nStore } from "~/lib/i18n";
-
-const ScoreBadge = ({ score }: { score: number }) => {
-    return (
-        <div
-            className={cn(
-                "flex flex-row gap-1 items-center px-2 py-0.5 rounded-[96px]",
-                score > 69
-                    ? "bg-badge-green"
-                    : score > 39
-                        ? "bg-badge-yellow"
-                        : "bg-badge-red"
-            )}
-        >
-            <img
-                src={score > 69 ? "/icons/check.svg" : "/icons/warning.svg"}
-                alt="score"
-                className="size-4"
-            />
-            <p
-                className={cn(
-                    "text-sm font-medium",
-                    score > 69
-                        ? "text-badge-green-text"
-                        : score > 39
-                            ? "text-badge-yellow-text"
-                            : "text-badge-red-text"
-                )}
-            >
-                {score}/100
-            </p>
-        </div>
-    );
-};
 
 const CategoryHeader = ({
     title,
@@ -48,8 +16,10 @@ const CategoryHeader = ({
     categoryScore: number;
 }) => {
     return (
-        <div className="flex flex-row gap-4 items-center py-2">
-            <p className="text-2xl font-semibold">{title}</p>
+        <div className="flex flex-row items-center justify-between w-full py-1 pr-2">
+            <span className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                {title}
+            </span>
             <ScoreBadge score={categoryScore} />
         </div>
     );
@@ -57,51 +27,74 @@ const CategoryHeader = ({
 
 const CategoryContent = ({
     tips,
+    bulletRewrites = [],
 }: {
     tips: { type: "good" | "improve"; tip: string; explanation: string }[];
+    bulletRewrites?: BulletRewrite[];
 }) => {
+    const { t } = useI18nStore();
+    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+    const handleCopy = (text: string, idx: number) => {
+        navigator.clipboard.writeText(text);
+        setCopiedIndex(idx);
+        setTimeout(() => setCopiedIndex(null), 2000);
+    };
+
     return (
-        <div className="flex flex-col gap-4 items-center w-full">
-            <div className="bg-gray-50 w-full rounded-lg px-5 py-4 grid grid-cols-2 gap-4 max-sm:grid-cols-1">
-                {tips.map((tip, index) => (
-                    <div className="flex flex-row gap-2 items-center" key={index}>
-                        <img
-                            src={
-                                tip.type === "good" ? "/icons/check.svg" : "/icons/warning.svg"
-                            }
-                            alt="score"
-                            className="size-5 shrink-0"
-                        />
-                        <p className="text-xl text-gray-500">{tip.tip}</p>
-                    </div>
-                ))}
-            </div>
-            <div className="flex flex-col gap-4 w-full">
-                {tips.map((tip, index) => (
-                    <div
-                        key={index + tip.tip}
-                        className={cn(
-                            "flex flex-col gap-2 rounded-2xl p-4",
-                            tip.type === "good"
-                                ? "bg-green-50 border border-green-200 text-green-700"
-                                : "bg-yellow-50 border border-yellow-200 text-yellow-700"
-                        )}
-                    >
-                        <div className="flex flex-row gap-2 items-center">
-                            <img
-                                src={
-                                    tip.type === "good"
-                                        ? "/icons/check.svg"
-                                        : "/icons/warning.svg"
-                                }
-                                alt="score"
-                                className="size-5 shrink-0"
-                            />
-                            <p className="text-xl font-semibold">{tip.tip}</p>
+        <div className="flex flex-col gap-4 w-full pt-2">
+            <div className="flex flex-col gap-3.5 w-full">
+                {tips.map((tip, index) => {
+                    const rewrite = bulletRewrites[index % (bulletRewrites.length || 1)];
+
+                    return (
+                        <div
+                            key={index + tip.tip}
+                            className={`flex flex-col gap-3 rounded-2xl p-4 sm:p-5 border transition-all ${
+                                tip.type === "good"
+                                    ? "bg-emerald-500/5 dark:bg-emerald-500/10 border-emerald-500/20 text-emerald-900 dark:text-emerald-200"
+                                    : "bg-amber-500/5 dark:bg-amber-500/10 border-amber-500/20 text-amber-900 dark:text-amber-200"
+                            }`}
+                        >
+                            <div className="flex items-center gap-2.5">
+                                <span className="text-base">
+                                    {tip.type === "good" ? "✓" : "⚠️"}
+                                </span>
+                                <h4 className="text-sm sm:text-base font-bold">
+                                    {tip.tip}
+                                </h4>
+                            </div>
+
+                            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed pl-6">
+                                {tip.explanation}
+                            </p>
+
+                            {/* Google XYZ Formula Suggestion for Improve items */}
+                            {tip.type === "improve" && rewrite && (
+                                <div className="mt-2 ml-6 p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/70 border border-amber-500/30 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                                            <span>✨</span> {t.bulletImprover.suggestedRewrite}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCopy(rewrite.suggestedRewrite, index)}
+                                            className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                                        >
+                                            {copiedIndex === index ? "✓ Copiado" : t.bulletImprover.applyIdea}
+                                        </button>
+                                    </div>
+                                    <p className="text-xs font-mono text-slate-800 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-950/80 p-2.5 rounded-lg border border-slate-200/60 dark:border-slate-800/60">
+                                        "{rewrite.suggestedRewrite}"
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                                        {rewrite.reasoning}
+                                    </p>
+                                </div>
+                            )}
                         </div>
-                        <p>{tip.explanation}</p>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
@@ -111,9 +104,13 @@ const Details = ({ feedback }: { feedback: Feedback }) => {
     const { t } = useI18nStore();
 
     return (
-        <div className="flex flex-col gap-4 w-full">
-            <Accordion>
-                <AccordionItem id="tone-style">
+        <div className="glass-card p-6 sm:p-8 w-full space-y-4">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white pb-2 border-b border-slate-200/80 dark:border-slate-800/80">
+                {t.resume.reviewHeading}
+            </h3>
+
+            <Accordion allowMultiple defaultOpen="tone-style">
+                <AccordionItem id="tone-style" className="border-b border-slate-200/80 dark:border-slate-800/80 py-1">
                     <AccordionHeader itemId="tone-style">
                         <CategoryHeader
                             title={t.resume.categories.toneAndStyle}
@@ -121,10 +118,14 @@ const Details = ({ feedback }: { feedback: Feedback }) => {
                         />
                     </AccordionHeader>
                     <AccordionContent itemId="tone-style">
-                        <CategoryContent tips={feedback.toneAndStyle.tips} />
+                        <CategoryContent
+                            tips={feedback.toneAndStyle.tips}
+                            bulletRewrites={feedback.bulletRewrites}
+                        />
                     </AccordionContent>
                 </AccordionItem>
-                <AccordionItem id="content">
+
+                <AccordionItem id="content" className="border-b border-slate-200/80 dark:border-slate-800/80 py-1">
                     <AccordionHeader itemId="content">
                         <CategoryHeader
                             title={t.resume.categories.content}
@@ -132,10 +133,14 @@ const Details = ({ feedback }: { feedback: Feedback }) => {
                         />
                     </AccordionHeader>
                     <AccordionContent itemId="content">
-                        <CategoryContent tips={feedback.content.tips} />
+                        <CategoryContent
+                            tips={feedback.content.tips}
+                            bulletRewrites={feedback.bulletRewrites}
+                        />
                     </AccordionContent>
                 </AccordionItem>
-                <AccordionItem id="structure">
+
+                <AccordionItem id="structure" className="border-b border-slate-200/80 dark:border-slate-800/80 py-1">
                     <AccordionHeader itemId="structure">
                         <CategoryHeader
                             title={t.resume.categories.structure}
@@ -146,7 +151,8 @@ const Details = ({ feedback }: { feedback: Feedback }) => {
                         <CategoryContent tips={feedback.structure.tips} />
                     </AccordionContent>
                 </AccordionItem>
-                <AccordionItem id="skills">
+
+                <AccordionItem id="skills" className="py-1">
                     <AccordionHeader itemId="skills">
                         <CategoryHeader
                             title={t.resume.categories.skills}

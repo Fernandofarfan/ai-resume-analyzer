@@ -1,24 +1,34 @@
-# AI Resume Analyzer (Resumind)
+# CVision AI — Smart ATS Resume Analyzer & Optimizer
 
-Un analizador inteligente de currículums y optimizador ATS construido con **React 19**, **React Router v7**, **Tailwind CSS**, y **TypeScript**.
+Un analizador y optimizador de currículums de última generación impulsado por inteligencia artificial y algoritmos heurísticos ATS, construido con **React 19**, **React Router v7**, **Tailwind CSS v4**, y **TypeScript**.
 
-## ✨ Características
+---
 
-- 📄 **Carga y previsualización de CVs**: Sube archivos PDF y visualiza de forma instantánea la vista previa renderizada.
-- 🎯 **Puntuación y Análisis ATS**: Evaluación automática de compatibilidad con sistemas ATS (Applicant Tracking System).
-- 💡 **Recomendaciones detalladas**: Sugerencias estructuradas organizadas por estructura, tono, contenido, habilidades y palabras clave.
-- 💾 **Persistencia local**: Historial y almacenamiento seguro en el navegador mediante IndexedDB y LocalStorage.
-- 🎨 **Diseño moderno y responsivo**: Interfaz fluida optimizada para desktop y móviles con Tailwind CSS.
+## ✨ Características Principales
 
-## 🛠️ Tecnologías
+- 📄 **Carga y Extracción de PDF Real**: Extracción automática de texto y renderizado de alta resolución con `pdfjs-dist`.
+- ⚡ **Diagnóstico de Compatibilidad ATS**: Puntuación ponderada basada en estructura, densidad de métricas, verbos de acción y cobertura de competencias.
+- 🎯 **Tracker de Palabras Clave Faltantes (Keyword Gap Analysis)**: Comparación en tiempo real entre los requerimientos de la oferta de trabajo y tu CV.
+- ✨ **Reescritura de Viñetas con Fórmula de Google (XYZ)**: Sugerencias automatizadas para transformar responsabilidades pasivas en logros cuantificados (*"Logré [X], medido por [Y], haciendo [Z]"*).
+- ✉️ **Generador de Carta de Presentación**: Redacción personalizada a medida para la empresa y puesto postulado, con opciones de copiado y descarga en `.txt`.
+- 🖨️ **Exportador de Reportes**: Exportación e impresión limpia del informe de auditoría.
+- 🌙 **Modo Oscuro / Claro**: Diseño moderno *Obsidian & Electric Indigo / Cyan* con persistencia de tema.
+- ⚙️ **Soporte BYOK & Offline**: Funciona 100% privado y offline por defecto, con opción de conectar API Keys (Gemini, Groq) u Ollama local.
+- 💾 **Persistencia 100% en el Navegador**: Almacenamiento seguro en `IndexedDB` y `localStorage` sin servidores externos obligatorios.
+
+---
+
+## 🛠️ Stack Tecnológico
 
 - **Frontend**: [React 19](https://react.dev/)
-- **Enrutamiento & SSR**: [React Router v7](https://reactrouter.com/)
+- **Enrutamiento**: [React Router v7 (SPA Mode)](https://reactrouter.com/)
 - **Estilos**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **Gestión de Estado**: [Zustand](https://zustand-demo.pmnd.rs/)
+- **Motor de PDF**: [PDF.js (pdfjs-dist)](https://mozilla.github.io/pdf.js/)
+- **Empaquetador**: [Vite](https://vite.dev/)
 - **Lenguaje**: [TypeScript](https://www.typescriptlang.org/)
-- **Procesamiento de PDF**: [PDF.js](https://mozilla.github.io/pdf.js/)
-- **Herramienta de construcción**: [Vite](https://vite.dev/)
-- **Gestor de estado**: [Zustand](https://zustand-demo.pmnd.rs/)
+
+---
 
 ## 🚀 Inicio Rápido
 
@@ -30,7 +40,7 @@ Un analizador inteligente de currículums y optimizador ATS construido con **Rea
 
 1. Clona el repositorio:
    ```bash
-   git clone <URL_DE_TU_REPOSITORIO>
+   git clone <URL_DEL_REPOSITORIO>
    cd ai-resume-analyzer
    ```
 
@@ -46,12 +56,16 @@ Un analizador inteligente de currículums y optimizador ATS construido con **Rea
 
 4. Abre [http://localhost:5173](http://localhost:5173) en tu navegador.
 
+---
+
 ## 📦 Scripts Disponibles
 
-- `npm run dev`: Inicia el servidor de desarrollo en local.
-- `npm run build`: Compila la aplicación para producción.
+- `npm run dev`: Inicia el servidor de desarrollo local.
+- `npm run build`: Compila la aplicación para producción en modo SPA.
+- `npm run typecheck`: Valida tipos de TypeScript y React Router typegen.
 - `npm run start`: Inicia el servidor de producción.
-- `npm run typecheck`: Valida los tipos con TypeScript y React Router typegen.
+
+---
 
 ## 📄 Licencia
 

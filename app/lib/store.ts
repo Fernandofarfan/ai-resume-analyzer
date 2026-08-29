@@ -34,6 +34,8 @@ interface AppStore {
         img2txt: (
             image: string | File | Blob
         ) => Promise<string | undefined>;
+        getSettings: () => AISettingsConfig;
+        saveSettings: (config: AISettingsConfig) => void;
     };
     kv: {
         get: (key: string) => Promise<string | null | undefined>;
@@ -51,7 +53,7 @@ interface AppStore {
 }
 
 // Local IndexedDB file storage helper
-const DB_NAME = "resumind_local_db";
+const DB_NAME = "cvision_local_db";
 const STORE_NAME = "files";
 
 const getDB = (): Promise<IDBDatabase> => {
@@ -174,8 +176,37 @@ const listLocalBlobs = async (): Promise<FSItem[]> => {
     }
 };
 
-// Intelligent Local Bilingual ATS Feedback Generator
-// Heuristic ATS Analysis Engine
+// Common stopwords to ignore in keyword matching
+const STOPWORDS = new Set([
+    "para", "como", "este", "esta", "estos", "estas", "sobre", "entre", "hacia", "hasta", "desde",
+    "with", "from", "that", "this", "these", "those", "have", "been", "will", "would", "should",
+    "could", "about", "above", "across", "after", "again", "against", "along", "also", "your",
+    "their", "there", "where", "which", "while", "when", "then", "them", "some", "such", "than",
+    "each", "every", "more", "most", "other", "into", "only", "well", "must", "work", "team",
+    "anos", "años", "years", "experiencia", "experience", "puesto", "role", "position", "ability",
+    "responsable", "responsibilities", "requisitos", "requirements", "conocimientos", "habilidades"
+]);
+
+// Extract significant domain/tech keywords
+const extractSignificantKeywords = (text: string): string[] => {
+    if (!text) return [];
+    const tokens = text
+        .toLowerCase()
+        .replace(/[^a-záéíóúüñ0-9+#./-]/gi, " ")
+        .split(/\s+/)
+        .filter(token => token.length > 2 && !STOPWORDS.has(token));
+
+    const counts: Record<string, number> = {};
+    tokens.forEach(t => {
+        counts[t] = (counts[t] || 0) + 1;
+    });
+
+    return Object.keys(counts)
+        .sort((a, b) => counts[b] - counts[a])
+        .slice(0, 15);
+};
+
+// Heuristic ATS & Keyword Analysis Engine
 const analyzeResumeContent = (instructionMessage: string): Feedback => {
     const isSpanish = /IDIOMA ESPAÑOL|puesto objetivo|currículum/i.test(instructionMessage);
 
@@ -202,6 +233,23 @@ const analyzeResumeContent = (instructionMessage: string): Feedback => {
     const textLower = resumeText.toLowerCase();
     const wordCount = resumeText ? resumeText.split(/\s+/).filter(Boolean).length : 0;
 
+    // --- Keyword Gap Analysis ---
+    const targetKeywords = extractSignificantKeywords(`${jobTitle} ${jobDesc}`);
+    const matchingKeywords: string[] = [];
+    const missingKeywords: string[] = [];
+
+    targetKeywords.forEach(kw => {
+        if (textLower.includes(kw)) {
+            matchingKeywords.push(kw);
+        } else {
+            missingKeywords.push(kw);
+        }
+    });
+
+    const keywordMatchScore = targetKeywords.length > 0
+        ? Math.round((matchingKeywords.length / targetKeywords.length) * 100)
+        : 85;
+
     // --- Heuristic 1: Structure & Sections ---
     const hasContact = /@|linkedin|github|telefono|teléfono|phone|email|correo|\+?\d{8,}/i.test(resumeText);
     const hasExperience = /experiencia|experience|trayectoria|work history|historial laboral|empleo/i.test(textLower);
@@ -209,63 +257,80 @@ const analyzeResumeContent = (instructionMessage: string): Feedback => {
     const hasSkills = /habilidades|skills|aptitudes|conocimientos|technologies|tecnolog[ií]as|herramientas|stack/i.test(textLower);
     const hasSummary = /resumen|summary|perfil|profile|sobre m[ií]|about me|objetivo/i.test(textLower);
 
-    let structureScore = 40;
+    let structureScore = 42;
     if (hasContact) structureScore += 12;
     if (hasExperience) structureScore += 16;
     if (hasEducation) structureScore += 12;
-    if (hasSkills) structureScore += 12;
+    if (hasSkills) structureScore += 10;
     if (hasSummary) structureScore += 8;
-    structureScore = Math.min(96, Math.max(35, structureScore));
+    structureScore = Math.min(98, Math.max(35, structureScore));
 
     // --- Heuristic 2: Content & Metrics ---
     const metricMatches = resumeText.match(/\d+[\s]*(?:%|k|m|usd|eur|\$|a[ñn]os|years|usuarios|users|clientes|clients|ventas|sales|horas|hours|projects|proyectos)/gi) || [];
     const metricCount = metricMatches.length;
 
-    let contentScore = 50;
-    if (wordCount >= 200) contentScore += 15;
+    let contentScore = 52;
+    if (wordCount >= 200) contentScore += 14;
     else if (wordCount >= 100) contentScore += 8;
-    if (metricCount >= 4) contentScore += 25;
-    else if (metricCount >= 2) contentScore += 15;
+    if (metricCount >= 4) contentScore += 24;
+    else if (metricCount >= 2) contentScore += 14;
     else if (metricCount >= 1) contentScore += 8;
-    contentScore = Math.min(95, Math.max(30, contentScore));
+    contentScore = Math.min(96, Math.max(30, contentScore));
 
     // --- Heuristic 3: Tone & Action Verbs ---
-    const actionVerbsEs = /lider[eé]|desarroll[eé]|dise[ñn][eé]|implement[eé]|optimiz[eé]|coordin[eé]|cre[eé]|aument[eé]|reduj[eé]|gestion[eé]/gi;
-    const actionVerbsEn = /led|developed|designed|implemented|optimized|coordinated|created|increased|reduced|managed|engineered|built/gi;
+    const actionVerbsEs = /lider[eé]|desarroll[eé]|dise[ñn][eé]|implement[eé]|optimiz[eé]|coordin[eé]|cre[eé]|aument[eé]|reduj[eé]|gestion[eé]|arquitectur/gi;
+    const actionVerbsEn = /led|developed|designed|implemented|optimized|coordinated|created|increased|reduced|managed|engineered|built|architected/gi;
     const actionVerbCount = (resumeText.match(isSpanish ? actionVerbsEs : actionVerbsEn) || []).length;
 
     const passivePhrases = /responsable de|ayud[eé] a|particip[eé] en|assisted with|helped to|responsible for/gi;
     const passiveCount = (resumeText.match(passivePhrases) || []).length;
 
-    let toneScore = 60;
-    if (actionVerbCount >= 4) toneScore += 25;
-    else if (actionVerbCount >= 2) toneScore += 15;
+    let toneScore = 62;
+    if (actionVerbCount >= 4) toneScore += 24;
+    else if (actionVerbCount >= 2) toneScore += 14;
     else if (actionVerbCount >= 1) toneScore += 8;
     if (passiveCount > 2) toneScore -= 10;
-    toneScore = Math.min(96, Math.max(35, toneScore));
+    toneScore = Math.min(97, Math.max(35, toneScore));
 
-    // --- Heuristic 4: Skills & Keywords ---
-    let matchedKeywords = 0;
-    if (jobDesc) {
-        const descWords = jobDesc.toLowerCase().split(/\W+/).filter(w => w.length > 3);
-        const uniqueDescWords = Array.from(new Set(descWords));
-        const matches = uniqueDescWords.filter(w => textLower.includes(w));
-        matchedKeywords = matches.length;
-    }
-
-    let skillsScore = 60;
-    if (hasSkills) skillsScore += 15;
-    if (matchedKeywords >= 5) skillsScore += 20;
-    else if (matchedKeywords >= 2) skillsScore += 10;
+    // --- Heuristic 4: Skills Score ---
+    let skillsScore = Math.round((keywordMatchScore * 0.6) + (hasSkills ? 35 : 15));
     skillsScore = Math.min(98, Math.max(35, skillsScore));
 
     // --- ATS Overall Score ---
-    const atsScore = Math.round((structureScore * 0.3) + (skillsScore * 0.3) + (contentScore * 0.25) + (toneScore * 0.15));
+    const atsScore = Math.round((structureScore * 0.28) + (skillsScore * 0.32) + (contentScore * 0.25) + (toneScore * 0.15));
     const overall = Math.round((atsScore * 0.35) + (contentScore * 0.25) + (structureScore * 0.2) + (toneScore * 0.1) + (skillsScore * 0.1));
+
+    // Bullet rewrites with Google XYZ formula
+    const bulletRewrites: BulletRewrite[] = [
+        {
+            originalTip: isSpanish ? "Cuantificar logros con métricas" : "Quantify achievements with metrics",
+            suggestedRewrite: isSpanish
+                ? `Optimicé el flujo de trabajo para ${jobTitle}, logrando un aumento del 28% en la velocidad de entrega mediante la adopción de herramientas modernas y mejores prácticas.`
+                : `Engineered core workflows for ${jobTitle}, resulting in a 28% increase in delivery speed by implementing standardized CI/CD and modular architecture.`,
+            reasoning: isSpanish
+                ? "Aplica la fórmula Google: Logro específico + Impacto numérico + Método de implementación."
+                : "Applies Google XYZ format: Specific achievement + Quantified metric + Mechanism of execution."
+        },
+        {
+            originalTip: isSpanish ? "Evitar lenguaje pasivo" : "Eliminate passive phrasing",
+            suggestedRewrite: isSpanish
+                ? `Lideré el diseño e implementación de la arquitectura técnica, reduciendo los tiempos de respuesta en un 35%.`
+                : `Spearheaded end-to-end technical execution, slashing system response latency by 35%.`,
+            reasoning: isSpanish
+                ? "Reemplaza 'responsable de' por un verbo de acción directo ('Lideré') y asocia un resultado medible."
+                : "Replaces passive duty descriptions with high-impact proactive verbs."
+        }
+    ];
 
     if (isSpanish) {
         return {
             overallScore: overall,
+            keywords: {
+                matchScore: keywordMatchScore,
+                matching: matchingKeywords,
+                missing: missingKeywords,
+            },
+            bulletRewrites,
             ATS: {
                 score: atsScore,
                 tips: [
@@ -278,7 +343,7 @@ const analyzeResumeContent = (instructionMessage: string): Feedback => {
                             type: "improve",
                             tip: "Asegúrate de incluir secciones claramente tituladas: 'Experiencia Laboral', 'Educación' y 'Habilidades'.",
                         },
-                    matchedKeywords >= 3
+                    matchingKeywords.length >= 3
                         ? {
                             type: "good",
                             tip: `Buena densidad de palabras clave alineadas con el puesto de ${jobTitle}.`,
@@ -396,17 +461,17 @@ const analyzeResumeContent = (instructionMessage: string): Feedback => {
                             tip: "Crear Sección de Habilidades",
                             explanation: "Agrega un bloque dedicado a Habilidades Técnicas, Frameworks y Herramientas.",
                         },
-                    jobDesc && matchedKeywords >= 3
+                    matchingKeywords.length >= 3
                         ? {
                             type: "good",
                             tip: "Coincidencia con la Oferta",
-                            explanation: "Detectamos términos clave requeridos por la vacante dentro de tu perfil.",
+                            explanation: `Detectamos términos clave requeridos por la vacante (${matchingKeywords.slice(0, 4).join(", ")}).`,
                         }
                         : {
                             type: "improve",
                             tip: "Optimizar Palabras Clave",
-                            explanation: jobDesc
-                                ? `Integra términos específicos de la oferta como "${jobDesc.slice(0, 50)}..."`
+                            explanation: missingKeywords.length > 0
+                                ? `Te recomendamos incorporar términos de la oferta como: ${missingKeywords.slice(0, 4).join(", ")}.`
                                 : `Incluye certificaciones y términos tecnológicos estándar para el rol de ${jobTitle}.`,
                         },
                 ],
@@ -416,6 +481,12 @@ const analyzeResumeContent = (instructionMessage: string): Feedback => {
 
     return {
         overallScore: overall,
+        keywords: {
+            matchScore: keywordMatchScore,
+            matching: matchingKeywords,
+            missing: missingKeywords,
+        },
+        bulletRewrites,
         ATS: {
             score: atsScore,
             tips: [
@@ -428,7 +499,7 @@ const analyzeResumeContent = (instructionMessage: string): Feedback => {
                         type: "improve",
                         tip: "Ensure clearly labeled sections: 'Work Experience', 'Education', and 'Skills'.",
                     },
-                matchedKeywords >= 3
+                matchingKeywords.length >= 3
                     ? {
                         type: "good",
                         tip: `Solid keyword alignment matching the role of ${jobTitle}.`,
@@ -546,17 +617,17 @@ const analyzeResumeContent = (instructionMessage: string): Feedback => {
                         tip: "Create Categorized Skills Section",
                         explanation: "Group skills into Core Languages, Frameworks, and Tools for faster recruiter evaluation.",
                     },
-                jobDesc && matchedKeywords >= 3
+                matchingKeywords.length >= 3
                     ? {
                         type: "good",
                         tip: "Job Match Alignment",
-                        explanation: "Key keywords from the target job description were successfully found in your profile.",
+                        explanation: `Key keywords from the target job were found in your profile (${matchingKeywords.slice(0, 4).join(", ")}).`,
                     }
                     : {
                         type: "improve",
                         tip: "Targeted Industry Keywords",
-                        explanation: jobDesc
-                            ? `Incorporate more terminology directly from the job posting: "${jobDesc.slice(0, 60)}..."`
+                        explanation: missingKeywords.length > 0
+                            ? `Consider integrating missing job requirements: ${missingKeywords.slice(0, 4).join(", ")}.`
                             : `Ensure specific industry certifications and tools for ${jobTitle} are prominently featured.`,
                     },
             ],
@@ -567,6 +638,13 @@ const analyzeResumeContent = (instructionMessage: string): Feedback => {
 const defaultLocalUser: AppUser = {
     uuid: "local-user-id",
     username: "Local User",
+};
+
+const DEFAULT_AI_CONFIG: AISettingsConfig = {
+    provider: "offline",
+    apiKey: "",
+    ollamaEndpoint: "http://localhost:11434",
+    model: "llama3",
 };
 
 export const useAppStore = create<AppStore>((set, get) => {
@@ -629,6 +707,26 @@ export const useAppStore = create<AppStore>((set, get) => {
 
     const deleteFile = async (path: string) => {
         await deleteLocalBlob(path);
+    };
+
+    const getSettings = (): AISettingsConfig => {
+        if (typeof localStorage !== "undefined") {
+            const saved = localStorage.getItem("cvision_ai_config");
+            if (saved) {
+                try {
+                    return JSON.parse(saved);
+                } catch {
+                    return DEFAULT_AI_CONFIG;
+                }
+            }
+        }
+        return DEFAULT_AI_CONFIG;
+    };
+
+    const saveSettings = (config: AISettingsConfig): void => {
+        if (typeof localStorage !== "undefined") {
+            localStorage.setItem("cvision_ai_config", JSON.stringify(config));
+        }
     };
 
     const chat = async (
@@ -752,6 +850,8 @@ export const useAppStore = create<AppStore>((set, get) => {
             chat,
             feedback,
             img2txt,
+            getSettings,
+            saveSettings,
         },
         kv: {
             get: getKV,

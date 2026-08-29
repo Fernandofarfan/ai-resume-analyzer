@@ -5,16 +5,25 @@ export type Language = "es" | "en";
 export interface Translations {
     navbar: {
         appName: string;
+        tagline: string;
         uploadResume: string;
+        settings: string;
     };
     home: {
         pageTitle: string;
         metaDescription: string;
         heroTitle: string;
+        heroSubtitle: string;
         noResumesTitle: string;
         reviewResumesSub: string;
         uploadFirstButton: string;
         defaultResumeTitle: string;
+        searchPlaceholder: string;
+        filterAll: string;
+        filterHigh: string;
+        filterMedium: string;
+        filterLow: string;
+        resumesFound: string;
     };
     upload: {
         pageTitle: string;
@@ -60,12 +69,61 @@ export interface Translations {
         deleteConfirmMessage: string;
         cancelDelete: string;
         confirmDelete: string;
+        exportPdf: string;
+        coverLetterBtn: string;
         categories: {
             toneAndStyle: string;
             content: string;
             structure: string;
             skills: string;
         };
+    };
+    keywords: {
+        title: string;
+        subtitle: string;
+        matchRate: string;
+        matchingKeywords: string;
+        missingKeywords: string;
+        noMissing: string;
+        tipMissing: string;
+    };
+    coverLetter: {
+        modalTitle: string;
+        subtitle: string;
+        generating: string;
+        copyBtn: string;
+        copied: string;
+        downloadTxt: string;
+        close: string;
+        recipient: string;
+    };
+    settings: {
+        modalTitle: string;
+        subtitle: string;
+        providerLabel: string;
+        offlineOption: string;
+        offlineDesc: string;
+        geminiOption: string;
+        geminiDesc: string;
+        groqOption: string;
+        groqDesc: string;
+        ollamaOption: string;
+        ollamaDesc: string;
+        apiKeyLabel: string;
+        apiKeyPlaceholder: string;
+        ollamaEndpointLabel: string;
+        saveBtn: string;
+        savedNotice: string;
+    };
+    bulletImprover: {
+        suggestedRewrite: string;
+        googleFormula: string;
+        whyBetter: string;
+        applyIdea: string;
+    };
+    theme: {
+        toggleDark: string;
+        toggleLight: string;
     };
     languageSelector: {
         spanish: string;
@@ -76,68 +134,126 @@ export interface Translations {
 export const translations: Record<Language, Translations> = {
     es: {
         navbar: {
-            appName: "RESUMIND",
-            uploadResume: "Subir Currículum",
+            appName: "CVision AI",
+            tagline: "Optimizador ATS & Analizador de CVs",
+            uploadResume: "Analizar CV",
+            settings: "Configuración IA",
         },
         home: {
-            pageTitle: "Resumind | Analizador de Currículums con IA",
-            metaDescription: "¡Feedback inteligente y puntuación ATS para conseguir el trabajo de tus sueños!",
-            heroTitle: "Gestiona tus Postulaciones y Puntuaciones de CV",
-            noResumesTitle: "No se encontraron currículums. Sube tu primer CV para obtener feedback.",
-            reviewResumesSub: "Revisa tus postulaciones y consulta el análisis detallado con IA.",
-            uploadFirstButton: "Subir Currículum",
-            defaultResumeTitle: "Currículum",
+            pageTitle: "CVision AI | Analizador y Optimizador ATS de Currículums",
+            metaDescription: "Auditoría inteligente de CVs, detección de palabras clave y puntuación ATS para maximizar tus entrevistas.",
+            heroTitle: "Auditoría Inteligente & Optimización ATS",
+            heroSubtitle: "Analiza la compatibilidad de tu currículum contra las ofertas laborales con métricas reales y recomendaciones estratégicas.",
+            noResumesTitle: "Aún no tienes currículums analizados.",
+            reviewResumesSub: "Historial de análisis y diagnóstico de compatibilidad ATS.",
+            uploadFirstButton: "Subir tu primer CV",
+            defaultResumeTitle: "Currículum Profesional",
+            searchPlaceholder: "Buscar por empresa, puesto o palabra clave...",
+            filterAll: "Todos",
+            filterHigh: "Alto (> 80)",
+            filterMedium: "Medio (50-79)",
+            filterLow: "Bajo (< 50)",
+            resumesFound: "currículums encontrados",
         },
         upload: {
-            pageTitle: "Resumind | Subir y Analizar",
-            heading: "Feedback Inteligente para tu Trabajo Ideal",
-            subheading: "Sube tu CV en PDF para obtener una puntuación ATS y recomendaciones de mejora",
-            companyNameLabel: "Nombre de la Empresa",
-            companyNamePlaceholder: "Ej. Google, Mercado Libre, Globant",
-            jobTitleLabel: "Título del Puesto",
-            jobTitlePlaceholder: "Ej. Frontend Developer, Data Analyst",
-            jobDescriptionLabel: "Descripción del Puesto / Oferta Laboral",
-            jobDescriptionPlaceholder: "Pega aquí los requisitos y responsabilidades de la oferta de trabajo...",
+            pageTitle: "CVision AI | Subir y Analizar",
+            heading: "Diagnóstico de CV y Compatibilidad ATS",
+            subheading: "Sube tu archivo PDF y la descripción del puesto para un análisis comparativo y sugerencias de impacto.",
+            companyNameLabel: "Empresa de Destino (Opcional)",
+            companyNamePlaceholder: "Ej. Google, Mercado Libre, Spotify",
+            jobTitleLabel: "Puesto Objetivo (Recomendado)",
+            jobTitlePlaceholder: "Ej. Senior Frontend Developer, Data Scientist",
+            jobDescriptionLabel: "Descripción o Requisitos de la Oferta",
+            jobDescriptionPlaceholder: "Pega aquí los requerimientos, responsabilidades y tecnologías de la vacante para un análisis de keywords preciso...",
             uploadResumeLabel: "Subir Currículum en PDF",
-            clickToUpload: "Haz clic para subir",
-            orDragAndDrop: "o arrastra y suelta aquí",
-            pdfMaxSize: "PDF (máx. 20 MB)",
-            analyzeButton: "Analizar Currículum",
-            statusUploading: "Subiendo el archivo...",
-            statusConverting: "Convirtiendo a vista previa de imagen...",
-            statusUploadingImage: "Procesando vista previa...",
-            statusPreparing: "Preparando análisis...",
-            statusAnalyzing: "Analizando currículum con IA y métricas ATS...",
-            statusComplete: "¡Análisis completado! Redirigiendo...",
+            clickToUpload: "Haz clic para subir tu PDF",
+            orDragAndDrop: "o arrastra y suelta el archivo aquí",
+            pdfMaxSize: "PDF (hasta 20 MB)",
+            analyzeButton: "Iniciar Auditoría con IA",
+            statusUploading: "Cargando archivo PDF...",
+            statusConverting: "Renderizando vista previa de alta resolución...",
+            statusUploadingImage: "Extrayendo texto y estructura...",
+            statusPreparing: "Mapeando competencias y requisitos...",
+            statusAnalyzing: "Calculando puntuación ATS y analizando vacante...",
+            statusComplete: "¡Auditoría completada! Redirigiendo...",
             errorUploadFile: "Error: No se pudo subir el archivo",
-            errorConvertPdf: "Error: No se pudo convertir el PDF",
-            errorUploadImage: "Error: No se pudo procesar la imagen del PDF",
-            errorAnalyze: "Error: Falló el análisis del currículum",
+            errorConvertPdf: "Error: No se pudo procesar el PDF",
+            errorUploadImage: "Error: Falló la generación de la vista previa",
+            errorAnalyze: "Error: Falló el análisis heurístico",
         },
         resume: {
-            pageTitle: "Resumind | Análisis de Currículum",
-            metaDescription: "Revisión detallada y sugerencias de mejora para tu CV",
-            backToHome: "Volver al Inicio",
-            reviewHeading: "Evaluación de Currículum",
-            overallScoreTitle: "Puntuación General del CV",
-            overallScoreSub: "Esta puntuación se calcula según las categorías y criterios analizados a continuación.",
-            atsTitle: "Puntuación ATS",
-            atsSubGood: "¡Excelente Trabajo!",
-            atsSubStart: "Buen Comienzo",
-            atsSubImprove: "Requiere Mejoras",
-            atsDescription: "Esta puntuación representa el desempeño esperado de tu CV en los sistemas de seguimiento de candidatos (ATS) utilizados por reclutadores.",
-            atsEncouragement: "Continúa optimizando tu currículum para maximizar tus posibilidades de superar los filtros ATS y captar la atención de los reclutadores.",
-            deleteResume: "Eliminar CV",
-            deleteConfirmTitle: "¿Eliminar este currículum?",
-            deleteConfirmMessage: "Esta acción no se puede deshacer. Se eliminarán el archivo PDF, la imagen y todo el análisis asociado.",
+            pageTitle: "CVision AI | Reporte de Auditoría",
+            metaDescription: "Reporte detallado de métricas ATS y recomendaciones para tu CV",
+            backToHome: "Volver al Panel",
+            reviewHeading: "Reporte de Diagnóstico ATS",
+            overallScoreTitle: "Puntuación de Impacto Global",
+            overallScoreSub: "Evaluación calculada a partir de parseabilidad ATS, densidad de métricas, estructura y tono profesional.",
+            atsTitle: "Compatibilidad ATS",
+            atsSubGood: "Perfil Altamente Competitivo",
+            atsSubStart: "Buen Nivel Base",
+            atsSubImprove: "Requiere Ajustes Críticos",
+            atsDescription: "Estimación del rendimiento de tu CV ante los algoritmos de filtrado automático (Applicant Tracking Systems).",
+            atsEncouragement: "Optimiza los puntos señalados para aumentar exponencialmente tu tasa de conversión a entrevistas.",
+            deleteResume: "Eliminar",
+            deleteConfirmTitle: "¿Eliminar este análisis?",
+            deleteConfirmMessage: "Esta acción borrará permanentemente el PDF, la vista previa y el reporte de diagnóstico.",
             cancelDelete: "Cancelar",
-            confirmDelete: "Eliminar",
+            confirmDelete: "Confirmar Borrado",
+            exportPdf: "Exportar Reporte",
+            coverLetterBtn: "Generar Carta de Presentación",
             categories: {
-                toneAndStyle: "Tono y Estilo",
-                content: "Contenido y Logros",
-                structure: "Estructura y Formato",
-                skills: "Habilidades y Palabras Clave",
+                toneAndStyle: "Tono & Verbos de Acción",
+                content: "Impacto Cuantificado & Logros",
+                structure: "Estructura & Jerarquía ATS",
+                skills: "Habilidades & Palabras Clave",
             },
+        },
+        keywords: {
+            title: "Diagnóstico de Palabras Clave (Keywords)",
+            subtitle: "Comparación de términos técnicos y competencias entre tu CV y la oferta laboral.",
+            matchRate: "Coincidencia de Keywords",
+            matchingKeywords: "Keywords Detectadas en tu CV",
+            missingKeywords: "Keywords Críticas Faltantes",
+            noMissing: "¡Excelente! Tu CV cubre los principales términos de la oferta.",
+            tipMissing: "Tip: Incorpora estas palabras clave en tu sección de experiencia o habilidades para mejorar tu filtro ATS.",
+        },
+        coverLetter: {
+            modalTitle: "Carta de Presentación Personalizada",
+            subtitle: "Generada automáticamente alineando tu trayectoria con los requisitos de la vacante.",
+            generating: "Redactando carta de presentación a medida...",
+            copyBtn: "Copiar al Portapapeles",
+            copied: "¡Copiado!",
+            downloadTxt: "Descargar .TXT",
+            close: "Cerrar",
+            recipient: "Equipo de Selección / Hiring Manager",
+        },
+        settings: {
+            modalTitle: "Motor de Inteligencia Artificial",
+            subtitle: "Elige entre el motor offline integrado o conecta tu propia API de IA.",
+            providerLabel: "Proveedor de Análisis",
+            offlineOption: "Motor Local Heurístico (100% Offline y Privado)",
+            offlineDesc: "Analiza el texto extraído directamente en tu navegador. Rápido, seguro y sin requerir internet ni claves.",
+            geminiOption: "Google Gemini API (Gratuito / BYOK)",
+            geminiDesc: "Utiliza modelos Gemini 1.5 Flash para un análisis contextual enriquecido.",
+            groqOption: "Groq Cloud (Llama 3 ultra-rápido)",
+            groqDesc: "Inferencia en milisegundos con modelos Llama 3.",
+            ollamaOption: "Ollama Local (100% Localhost)",
+            ollamaDesc: "Conecta con tu instancia local de Ollama (ej. localhost:11434).",
+            apiKeyLabel: "Clave de API (API Key)",
+            apiKeyPlaceholder: "Pega tu API Key aquí...",
+            ollamaEndpointLabel: "URL del Endpoint de Ollama",
+            saveBtn: "Guardar Preferencias",
+            savedNotice: "Configuración guardada correctamente.",
+        },
+        bulletImprover: {
+            suggestedRewrite: "Sugerencia con Fórmula de Google (XYZ)",
+            googleFormula: "Logré [X], medido por [Y], implementando [Z]",
+            whyBetter: "Por qué funciona mejor:",
+            applyIdea: "Copiar Sugerencia",
+        },
+        theme: {
+            toggleDark: "Cambiar a Modo Oscuro",
+            toggleLight: "Cambiar a Modo Claro",
         },
         languageSelector: {
             spanish: "Español",
@@ -146,68 +262,126 @@ export const translations: Record<Language, Translations> = {
     },
     en: {
         navbar: {
-            appName: "RESUMIND",
-            uploadResume: "Upload Resume",
+            appName: "CVision AI",
+            tagline: "ATS Optimizer & Resume Analyzer",
+            uploadResume: "Analyze Resume",
+            settings: "AI Settings",
         },
         home: {
-            pageTitle: "Resumind | AI Resume Analyzer",
-            metaDescription: "Smart feedback for your dream job!",
-            heroTitle: "Track Your Applications & Resume Ratings",
-            noResumesTitle: "No resumes found. Upload your first resume to get feedback.",
-            reviewResumesSub: "Review your submissions and check AI-powered feedback.",
-            uploadFirstButton: "Upload Resume",
-            defaultResumeTitle: "Resume",
+            pageTitle: "CVision AI | Smart ATS Resume Analyzer & Optimizer",
+            metaDescription: "Comprehensive resume audit, keyword matching, and ATS score optimization for landing interviews.",
+            heroTitle: "Smart Resume Audit & ATS Optimization",
+            heroSubtitle: "Benchmark your resume against target job requirements with deterministic metrics and actionable advice.",
+            noResumesTitle: "No analyzed resumes yet.",
+            reviewResumesSub: "Audit history and ATS compatibility breakdown.",
+            uploadFirstButton: "Upload Your First Resume",
+            defaultResumeTitle: "Professional Resume",
+            searchPlaceholder: "Search by company, role, or keyword...",
+            filterAll: "All",
+            filterHigh: "High (> 80)",
+            filterMedium: "Medium (50-79)",
+            filterLow: "Low (< 50)",
+            resumesFound: "resumes found",
         },
         upload: {
-            pageTitle: "Resumind | Upload & Analyze",
-            heading: "Smart feedback for your dream job",
-            subheading: "Drop your resume for an ATS score and improvement tips",
-            companyNameLabel: "Company Name",
-            companyNamePlaceholder: "e.g. Google, Microsoft, Apple",
-            jobTitleLabel: "Job Title",
-            jobTitlePlaceholder: "e.g. Frontend Developer, Cloud Engineer",
-            jobDescriptionLabel: "Job Description",
-            jobDescriptionPlaceholder: "Paste the job requirements and responsibilities here...",
-            uploadResumeLabel: "Upload Resume",
-            clickToUpload: "Click to upload",
-            orDragAndDrop: "or drag and drop",
-            pdfMaxSize: "PDF (max 20 MB)",
-            analyzeButton: "Analyze Resume",
-            statusUploading: "Uploading the file...",
-            statusConverting: "Converting to image...",
-            statusUploadingImage: "Uploading the image...",
-            statusPreparing: "Preparing data...",
-            statusAnalyzing: "Analyzing with AI & ATS metrics...",
-            statusComplete: "Analysis complete, redirecting...",
-            errorUploadFile: "Error: Failed to upload file",
-            errorConvertPdf: "Error: Failed to convert PDF to image",
-            errorUploadImage: "Error: Failed to upload image",
-            errorAnalyze: "Error: Failed to analyze resume",
+            pageTitle: "CVision AI | Upload & Analyze",
+            heading: "Resume Diagnosis & ATS Compatibility",
+            subheading: "Upload your PDF resume and target job description for a comprehensive gap analysis and impact tips.",
+            companyNameLabel: "Target Company (Optional)",
+            companyNamePlaceholder: "e.g. Google, Microsoft, Stripe",
+            jobTitleLabel: "Target Role (Recommended)",
+            jobTitlePlaceholder: "e.g. Senior Frontend Engineer, ML Specialist",
+            jobDescriptionLabel: "Job Description / Requirements",
+            jobDescriptionPlaceholder: "Paste the job responsibilities, skills, and qualifications here for keyword gap analysis...",
+            uploadResumeLabel: "Upload Resume in PDF",
+            clickToUpload: "Click to upload your PDF",
+            orDragAndDrop: "or drag and drop your file here",
+            pdfMaxSize: "PDF (up to 20 MB)",
+            analyzeButton: "Run AI Audit",
+            statusUploading: "Uploading PDF file...",
+            statusConverting: "Rendering high-res preview...",
+            statusUploadingImage: "Extracting text and section topology...",
+            statusPreparing: "Mapping skills and qualifications...",
+            statusAnalyzing: "Computing ATS score & vacancy alignment...",
+            statusComplete: "Audit complete! Redirecting...",
+            errorUploadFile: "Error: Could not upload file",
+            errorConvertPdf: "Error: Failed to process PDF",
+            errorUploadImage: "Error: Failed to generate page preview",
+            errorAnalyze: "Error: Heuristic analysis failed",
         },
         resume: {
-            pageTitle: "Resumind | Review",
-            metaDescription: "Detailed overview of your resume",
-            backToHome: "Back to Homepage",
-            reviewHeading: "Resume Review",
-            overallScoreTitle: "Your Resume Score",
-            overallScoreSub: "This score is calculated based on the variables listed below.",
-            atsTitle: "ATS Score",
-            atsSubGood: "Great Job!",
-            atsSubStart: "Good Start",
-            atsSubImprove: "Needs Improvement",
-            atsDescription: "This score represents how well your resume is likely to perform in Applicant Tracking Systems used by employers.",
-            atsEncouragement: "Keep refining your resume to improve your chances of getting past ATS filters and into the hands of recruiters.",
-            deleteResume: "Delete Resume",
-            deleteConfirmTitle: "Delete this resume?",
-            deleteConfirmMessage: "This action cannot be undone. The PDF file, preview image, and all analysis data will be permanently deleted.",
+            pageTitle: "CVision AI | Audit Report",
+            metaDescription: "Detailed ATS metrics and strategic recommendations for your resume",
+            backToHome: "Back to Dashboard",
+            reviewHeading: "ATS Diagnostic Report",
+            overallScoreTitle: "Overall Impact Score",
+            overallScoreSub: "Evaluated across ATS parseability, quantifiable achievements, layout hierarchy, and active tone.",
+            atsTitle: "ATS Compatibility",
+            atsSubGood: "Highly Competitive Profile",
+            atsSubStart: "Solid Foundation",
+            atsSubImprove: "Critical Adjustments Needed",
+            atsDescription: "Estimated pass rate against automated Applicant Tracking Systems.",
+            atsEncouragement: "Implement the recommendations below to substantially boost your recruiter response rate.",
+            deleteResume: "Delete",
+            deleteConfirmTitle: "Delete this audit?",
+            deleteConfirmMessage: "This will permanently remove the PDF, image preview, and diagnostic report.",
             cancelDelete: "Cancel",
-            confirmDelete: "Delete",
+            confirmDelete: "Confirm Delete",
+            exportPdf: "Export Report",
+            coverLetterBtn: "Generate Cover Letter",
             categories: {
-                toneAndStyle: "Tone & Style",
-                content: "Content & Impact",
-                structure: "Structure & Layout",
-                skills: "Skills & Keywords",
+                toneAndStyle: "Tone & Action Verbs",
+                content: "Quantified Impact & Scope",
+                structure: "Layout & Section Hierarchy",
+                skills: "Skills & Targeted Keywords",
             },
+        },
+        keywords: {
+            title: "Keyword & Skill Gap Analysis",
+            subtitle: "Direct comparison between your resume and the target job description requirements.",
+            matchRate: "Keyword Match Rate",
+            matchingKeywords: "Keywords Found in Resume",
+            missingKeywords: "Critical Missing Keywords",
+            noMissing: "Outstanding! Your resume covers all core keywords from the job posting.",
+            tipMissing: "Tip: Integrate these missing keywords into your experience bullet points or skills section to boost ATS ranking.",
+        },
+        coverLetter: {
+            modalTitle: "Tailored Cover Letter",
+            subtitle: "Automatically drafted by aligning your background with the target job requirements.",
+            generating: "Drafting your tailored cover letter...",
+            copyBtn: "Copy to Clipboard",
+            copied: "Copied!",
+            downloadTxt: "Download .TXT",
+            close: "Close",
+            recipient: "Hiring Team / Recruiting Manager",
+        },
+        settings: {
+            modalTitle: "AI Intelligence Engine",
+            subtitle: "Choose between the built-in offline engine or connect your own AI API.",
+            providerLabel: "Analysis Engine",
+            offlineOption: "Local Heuristic Engine (100% Offline & Private)",
+            offlineDesc: "Analyzes parsed text directly inside your browser. Ultra-fast, completely secure, and requires no API keys.",
+            geminiOption: "Google Gemini API (Free tier / BYOK)",
+            geminiDesc: "Leverage Gemini 1.5 Flash models for deep contextual analysis.",
+            groqOption: "Groq Cloud (Ultra-fast Llama 3)",
+            groqDesc: "Blazing fast Llama 3 inference.",
+            ollamaOption: "Ollama Localhost (100% Local)",
+            ollamaDesc: "Connect to your local Ollama server (e.g. localhost:11434).",
+            apiKeyLabel: "API Key",
+            apiKeyPlaceholder: "Paste your API Key here...",
+            ollamaEndpointLabel: "Ollama Endpoint URL",
+            saveBtn: "Save Preferences",
+            savedNotice: "Settings saved successfully.",
+        },
+        bulletImprover: {
+            suggestedRewrite: "Google XYZ Formula Suggestion",
+            googleFormula: "Accomplished [X], as measured by [Y], by doing [Z]",
+            whyBetter: "Why this works better:",
+            applyIdea: "Copy Suggestion",
+        },
+        theme: {
+            toggleDark: "Switch to Dark Mode",
+            toggleLight: "Switch to Light Mode",
         },
         languageSelector: {
             spanish: "Español",
@@ -224,7 +398,7 @@ interface I18nStore {
 
 const getInitialLanguage = (): Language => {
     if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("resumind_lang") as Language;
+        const saved = localStorage.getItem("cvision_lang") as Language;
         if (saved === "es" || saved === "en") return saved;
         if (navigator.language.startsWith("es")) return "es";
     }
@@ -235,7 +409,7 @@ export const useI18nStore = create<I18nStore>((set) => ({
     language: getInitialLanguage(),
     setLanguage: (lang: Language) => {
         if (typeof window !== "undefined") {
-            localStorage.setItem("resumind_lang", lang);
+            localStorage.setItem("cvision_lang", lang);
         }
         set({
             language: lang,

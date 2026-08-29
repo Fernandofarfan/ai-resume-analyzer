@@ -17,7 +17,7 @@ const FileUploader = ({ onFileSelect }: FileUploaderProps) => {
 
     const maxFileSize = 20 * 1024 * 1024; // 20MB in bytes
 
-    const { getRootProps, getInputProps, acceptedFiles } = useDropzone({
+    const { getRootProps, getInputProps, acceptedFiles, isDragActive } = useDropzone({
         onDrop,
         multiple: false,
         accept: { "application/pdf": [".pdf"] },
@@ -27,52 +27,71 @@ const FileUploader = ({ onFileSelect }: FileUploaderProps) => {
     const file = acceptedFiles[0] || null;
 
     return (
-        <div className="w-full gradient-border">
-            <div {...getRootProps()}>
+        <div className="w-full">
+            <div
+                {...getRootProps()}
+                className={`relative p-8 sm:p-10 rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer text-center ${
+                    isDragActive
+                        ? "border-indigo-500 bg-indigo-500/10 dark:bg-indigo-500/20 scale-101 ring-4 ring-indigo-500/20"
+                        : file
+                        ? "border-emerald-500/50 bg-emerald-500/5 dark:bg-emerald-500/10"
+                        : "border-slate-300 dark:border-slate-700/80 bg-white/60 dark:bg-slate-900/60 hover:border-indigo-500/60 hover:bg-slate-50 dark:hover:bg-slate-900/90"
+                }`}
+            >
                 <input {...getInputProps()} />
 
-                <div className="space-y-4 cursor-pointer">
-                    {file ? (
-                        <div className="uploader-selected-file" onClick={(e) => e.stopPropagation()}>
-                            <img src="/images/pdf.png" alt="pdf" className="size-10" />
-                            <div className="flex items-center space-x-3">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-700 truncate max-w-xs">
-                                        {file.name}
-                                    </p>
-                                    <p className="text-sm text-gray-500">
-                                        {formatSize(file.size)}
-                                    </p>
-                                </div>
+                {file ? (
+                    <div
+                        className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center font-bold text-xs shrink-0">
+                                PDF
                             </div>
-                            <button
-                                type="button"
-                                className="p-2 cursor-pointer"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onFileSelect?.(null);
-                                }}
-                            >
-                                <img src="/icons/cross.svg" alt="remove" className="w-4 h-4" />
-                            </button>
+                            <div className="text-left min-w-0">
+                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate max-w-xs sm:max-w-md">
+                                    {file.name}
+                                </p>
+                                <p className="text-xs text-slate-400">
+                                    {formatSize(file.size)} • Listo para analizar
+                                </p>
+                            </div>
                         </div>
-                    ) : (
-                        <div>
-                            <div className="mx-auto w-16 h-16 flex items-center justify-center mb-2">
-                                <img src="/icons/info.svg" alt="upload" className="size-20" />
-                            </div>
-                            <p className="text-lg text-gray-500">
-                                <span className="font-semibold">
+                        <button
+                            type="button"
+                            className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onFileSelect?.(null);
+                            }}
+                            title="Quitar archivo"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-indigo-500/20 to-cyan-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-inner">
+                            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                <span className="text-indigo-600 dark:text-indigo-400 underline decoration-indigo-500/40 underline-offset-4">
                                     {t.upload.clickToUpload}
                                 </span>{" "}
                                 {t.upload.orDragAndDrop}
                             </p>
-                            <p className="text-lg text-gray-500">
-                                PDF ({t.upload.pdfMaxSize.replace("PDF (", "").replace(")", "")})
+                            <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+                                {t.upload.pdfMaxSize}
                             </p>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
         </div>
     );

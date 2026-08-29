@@ -2,9 +2,23 @@ interface Resume {
     id: string;
     companyName?: string;
     jobTitle?: string;
+    jobDescription?: string;
     imagePath: string;
     resumePath: string;
+    rawText?: string;
     feedback: Feedback;
+}
+
+interface KeywordAnalysis {
+    matchScore: number;
+    matching: string[];
+    missing: string[];
+}
+
+interface BulletRewrite {
+    originalTip: string;
+    suggestedRewrite: string;
+    reasoning: string;
 }
 
 interface Feedback {
@@ -48,4 +62,13 @@ interface Feedback {
             explanation: string;
         }[];
     };
+    keywords?: KeywordAnalysis;
+    bulletRewrites?: BulletRewrite[];
+}
+
+interface AISettingsConfig {
+    provider: "offline" | "gemini" | "groq" | "ollama";
+    apiKey?: string;
+    ollamaEndpoint?: string;
+    model?: string;
 }
