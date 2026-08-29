@@ -1,25 +1,25 @@
 import React from "react";
-import { useI18nStore, type Language } from "~/lib/i18n";
+import { useI18nStore } from "~/lib/i18n";
 
 interface LanguageSelectorProps {
     className?: string;
 }
 
 const LanguageSelector: React.FC<LanguageSelectorProps> = ({ className = "" }) => {
-    const { language, setLanguage } = useI18nStore();
+    const { language, setLanguage, t } = useI18nStore();
 
     return (
-        <div className={`flex items-center bg-gray-100/90 hover:bg-gray-200/90 border border-gray-200 rounded-full p-1 shadow-xs transition-all duration-200 ${className}`}>
+        <div className={`flex items-center bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-full p-1 shadow-xs transition-all duration-200 ${className}`}>
             <button
                 type="button"
                 onClick={() => setLanguage("es")}
-                aria-label="Cambiar idioma a Español"
+                aria-label={t.languageSelector.spanish}
                 className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200 cursor-pointer ${
                     language === "es"
-                        ? "bg-white text-blue-600 shadow-xs scale-105"
-                        : "text-gray-600 hover:text-gray-900"
+                        ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs scale-102"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
-                title="Cambiar idioma a Español"
+                title={t.languageSelector.spanish}
             >
                 <span>🇪🇸</span>
                 <span>ES</span>
@@ -27,13 +27,13 @@ const LanguageSelector: React.FC<LanguageSelectorProps> = ({ className = "" }) =
             <button
                 type="button"
                 onClick={() => setLanguage("en")}
-                aria-label="Switch language to English"
+                aria-label={t.languageSelector.english}
                 className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200 cursor-pointer ${
                     language === "en"
-                        ? "bg-white text-blue-600 shadow-xs scale-105"
-                        : "text-gray-600 hover:text-gray-900"
+                        ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs scale-102"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
-                title="Switch language to English"
+                title={t.languageSelector.english}
             >
                 <span>🇬🇧</span>
                 <span>EN</span>

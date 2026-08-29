@@ -11,6 +11,7 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { useAppStore } from "~/lib/store";
 import { useThemeStore } from "~/lib/theme";
+import { useI18nStore } from "~/lib/i18n";
 import { useEffect } from "react";
 
 export const links: Route.LinksFunction = () => [
@@ -29,13 +30,14 @@ export const links: Route.LinksFunction = () => [
 export function Layout({ children }: { children: React.ReactNode }) {
   const { init } = useAppStore();
   const { theme } = useThemeStore();
+  const { language } = useI18nStore();
 
   useEffect(() => {
     init();
   }, [init]);
 
   return (
-    <html lang="es" className={theme === "dark" ? "dark" : ""}>
+    <html lang={language} className={theme === "dark" ? "dark" : ""}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
