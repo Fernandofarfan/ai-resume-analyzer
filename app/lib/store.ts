@@ -34,8 +34,6 @@ interface AppStore {
         img2txt: (
             image: string | File | Blob
         ) => Promise<string | undefined>;
-        getSettings: () => AISettingsConfig;
-        saveSettings: (config: AISettingsConfig) => void;
     };
     kv: {
         get: (key: string) => Promise<string | null | undefined>;
@@ -661,13 +659,6 @@ const defaultLocalUser: AppUser = {
     username: "Local User",
 };
 
-const DEFAULT_AI_CONFIG: AISettingsConfig = {
-    provider: "offline",
-    apiKey: "",
-    ollamaEndpoint: "http://localhost:11434",
-    model: "llama3",
-};
-
 export const useAppStore = create<AppStore>((set, get) => {
     const checkAuthStatus = async (): Promise<boolean> => {
         set({
@@ -730,34 +721,18 @@ export const useAppStore = create<AppStore>((set, get) => {
         await deleteLocalBlob(path);
     };
 
-    const getSettings = (): AISettingsConfig => {
-        if (typeof localStorage !== "undefined") {
-            const saved = localStorage.getItem("cvision_ai_config");
-            if (saved) {
-                try {
-                    return JSON.parse(saved);
-                } catch {
-                    return DEFAULT_AI_CONFIG;
-                }
-            }
-        }
-        return DEFAULT_AI_CONFIG;
-    };
-
-    const saveSettings = (config: AISettingsConfig): void => {
-        if (typeof localStorage !== "undefined") {
-            localStorage.setItem("cvision_ai_config", JSON.stringify(config));
-        }
-    };
-
     const runAIInference = async (message: string): Promise<string> => {
-        const config = getSettings();
+        const provider = (import.meta.env.VITE_AI_PROVIDER || "offline").toLowerCase();
+        const geminiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+        const groqKey = import.meta.env.VITE_GROQ_API_KEY || "";
+        const ollamaEndpoint = import.meta.env.VITE_OLLAMA_ENDPOINT || "http://localhost:11434";
+        const ollamaModel = import.meta.env.VITE_OLLAMA_MODEL || "llama3";
 
-        // 1. Google Gemini API (if key provided)
-        if (config.provider === "gemini" && config.apiKey) {
+        // 1. Google Gemini API (if VITE_AI_PROVIDER=gemini)
+        if (provider === "gemini" && geminiKey) {
             try {
                 const res = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${config.apiKey}`,
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
                     {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -779,14 +754,14 @@ export const useAppStore = create<AppStore>((set, get) => {
             }
         }
 
-        // 2. Groq Cloud API (if key provided)
-        if (config.provider === "groq" && config.apiKey) {
+        // 2. Groq Cloud API (if VITE_AI_PROVIDER=groq)
+        if (provider === "groq" && groqKey) {
             try {
                 const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
-                        Authorization: `Bearer ${config.apiKey}`,
+                        Authorization: `Bearer ${groqKey}`,
                     },
                     body: JSON.stringify({
                         model: "llama-3.1-8b-instant",
@@ -804,15 +779,14 @@ export const useAppStore = create<AppStore>((set, get) => {
             }
         }
 
-        // 3. Ollama Local (if endpoint provided)
-        if (config.provider === "ollama") {
+        // 3. Ollama Local (if VITE_AI_PROVIDER=ollama)
+        if (provider === "ollama") {
             try {
-                const endpoint = config.ollamaEndpoint || "http://localhost:11434";
-                const res = await fetch(`${endpoint}/api/generate`, {
+                const res = await fetch(`${ollamaEndpoint}/api/generate`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        model: config.model || "llama3",
+                        model: ollamaModel,
                         prompt: message,
                         format: "json",
                         stream: false,
@@ -953,8 +927,6 @@ export const useAppStore = create<AppStore>((set, get) => {
             chat,
             feedback,
             img2txt,
-            getSettings,
-            saveSettings,
         },
         kv: {
             get: getKV,

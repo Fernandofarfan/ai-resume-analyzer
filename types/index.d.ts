@@ -65,10 +65,3 @@ interface Feedback {
     keywords?: KeywordAnalysis;
     bulletRewrites?: BulletRewrite[];
 }
-
-interface AISettingsConfig {
-    provider: "offline" | "gemini" | "groq" | "ollama";
-    apiKey?: string;
-    ollamaEndpoint?: string;
-    model?: string;
-}

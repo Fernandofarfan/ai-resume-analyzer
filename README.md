@@ -1,6 +1,6 @@
 # CVision AI — Smart ATS Resume Analyzer & Optimizer
 
-Un analizador y optimizador de currículums de última generación impulsado por inteligencia artificial y algoritmos heurísticos ATS, construido con **React 19**, **React Router v7**, **Tailwind CSS v4**, y **TypeScript**.
+Un analizador y optimizador de currículums de última generación impulsado por algoritmos heurísticos ATS e inteligencia artificial, construido con **React 19**, **React Router v7**, **Tailwind CSS v4**, y **TypeScript**.
 
 ---
 
@@ -13,7 +13,7 @@ Un analizador y optimizador de currículums de última generación impulsado por
 - ✉️ **Generador de Carta de Presentación**: Redacción personalizada a medida para la empresa y puesto postulado, con opciones de copiado y descarga en `.txt`.
 - 🖨️ **Exportador de Reportes**: Exportación e impresión limpia del informe de auditoría.
 - 🌙 **Modo Oscuro / Claro**: Diseño moderno *Obsidian & Electric Indigo / Cyan* con persistencia de tema.
-- ⚙️ **Soporte BYOK & Offline**: Funciona 100% privado y offline por defecto, con opción de conectar API Keys (Gemini, Groq) u Ollama local.
+- ⚙️ **Configuración Segura vía `.env`**: Soporte para motor heurístico offline (por defecto), Google Gemini API, Groq Cloud u Ollama Local.
 - 💾 **Persistencia 100% en el Navegador**: Almacenamiento seguro en `IndexedDB` y `localStorage` sin servidores externos obligatorios.
 
 ---
@@ -27,6 +27,33 @@ Un analizador y optimizador de currículums de última generación impulsado por
 - **Motor de PDF**: [PDF.js (pdfjs-dist)](https://mozilla.github.io/pdf.js/)
 - **Empaquetador**: [Vite](https://vite.dev/)
 - **Lenguaje**: [TypeScript](https://www.typescriptlang.org/)
+
+---
+
+## 🔐 Configuración de Variables de Entorno (`.env`)
+
+Copia el archivo `.env.example` a `.env` y configura el motor de IA que prefieras:
+
+```bash
+cp .env.example .env
+```
+
+Contenido del archivo `.env`:
+
+```env
+# Proveedor de IA: "offline", "gemini", "groq", o "ollama"
+VITE_AI_PROVIDER=offline
+
+# Clave de API de Google Gemini (si VITE_AI_PROVIDER=gemini)
+VITE_GEMINI_API_KEY=
+
+# Clave de API de Groq (si VITE_AI_PROVIDER=groq)
+VITE_GROQ_API_KEY=
+
+# Configuración de Ollama Local (si VITE_AI_PROVIDER=ollama)
+VITE_OLLAMA_ENDPOINT=http://localhost:11434
+VITE_OLLAMA_MODEL=llama3
+```
 
 ---
 

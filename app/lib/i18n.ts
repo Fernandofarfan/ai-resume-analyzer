@@ -7,7 +7,6 @@ export interface Translations {
         appName: string;
         tagline: string;
         uploadResume: string;
-        settings: string;
     };
     home: {
         pageTitle: string;
@@ -112,24 +111,6 @@ export interface Translations {
         close: string;
         recipient: string;
     };
-    settings: {
-        modalTitle: string;
-        subtitle: string;
-        providerLabel: string;
-        offlineOption: string;
-        offlineDesc: string;
-        geminiOption: string;
-        geminiDesc: string;
-        groqOption: string;
-        groqDesc: string;
-        ollamaOption: string;
-        ollamaDesc: string;
-        apiKeyLabel: string;
-        apiKeyPlaceholder: string;
-        ollamaEndpointLabel: string;
-        saveBtn: string;
-        savedNotice: string;
-    };
     bulletImprover: {
         suggestedRewrite: string;
         googleFormula: string;
@@ -153,7 +134,6 @@ export const translations: Record<Language, Translations> = {
             appName: "CVision AI",
             tagline: "Optimizador ATS & Analizador de CVs",
             uploadResume: "Analizar CV",
-            settings: "Configuración IA",
         },
         home: {
             pageTitle: "CVision AI | Analizador y Optimizador ATS de Currículums",
@@ -258,24 +238,6 @@ export const translations: Record<Language, Translations> = {
             close: "Cerrar",
             recipient: "Equipo de Selección / Hiring Manager",
         },
-        settings: {
-            modalTitle: "Motor de Inteligencia Artificial",
-            subtitle: "Elige entre el motor offline integrado o conecta tu propia API de IA.",
-            providerLabel: "Proveedor de Análisis",
-            offlineOption: "Motor Local Heurístico (100% Offline y Privado)",
-            offlineDesc: "Analiza el texto extraído directamente en tu navegador. Rápido, seguro y sin requerir internet ni claves.",
-            geminiOption: "Google Gemini API (Gratuito / BYOK)",
-            geminiDesc: "Utiliza modelos Gemini 1.5 Flash para un análisis contextual enriquecido.",
-            groqOption: "Groq Cloud (Llama 3 ultra-rápido)",
-            groqDesc: "Inferencia en milisegundos con modelos Llama 3.",
-            ollamaOption: "Ollama Local (100% Localhost)",
-            ollamaDesc: "Conecta con tu instancia local de Ollama (ej. localhost:11434).",
-            apiKeyLabel: "Clave de API (API Key)",
-            apiKeyPlaceholder: "Pega tu API Key aquí...",
-            ollamaEndpointLabel: "URL del Endpoint de Ollama",
-            saveBtn: "Guardar Preferencias",
-            savedNotice: "Configuración guardada correctamente.",
-        },
         bulletImprover: {
             suggestedRewrite: "Sugerencia con Fórmula de Google (XYZ)",
             googleFormula: "Logré [X], medido por [Y], implementando [Z]",
@@ -297,7 +259,6 @@ export const translations: Record<Language, Translations> = {
             appName: "CVision AI",
             tagline: "ATS Optimizer & Resume Analyzer",
             uploadResume: "Analyze Resume",
-            settings: "AI Settings",
         },
         home: {
             pageTitle: "CVision AI | Smart ATS Resume Analyzer & Optimizer",
@@ -401,24 +362,6 @@ export const translations: Record<Language, Translations> = {
             downloadTxt: "Download .TXT",
             close: "Close",
             recipient: "Hiring Team / Recruiting Manager",
-        },
-        settings: {
-            modalTitle: "AI Intelligence Engine",
-            subtitle: "Choose between the built-in offline engine or connect your own AI API.",
-            providerLabel: "Analysis Engine",
-            offlineOption: "Local Heuristic Engine (100% Offline & Private)",
-            offlineDesc: "Analyzes parsed text directly inside your browser. Ultra-fast, completely secure, and requires no API keys.",
-            geminiOption: "Google Gemini API (Free tier / BYOK)",
-            geminiDesc: "Leverage Gemini 1.5 Flash models for deep contextual analysis.",
-            groqOption: "Groq Cloud (Ultra-fast Llama 3)",
-            groqDesc: "Blazing fast Llama 3 inference.",
-            ollamaOption: "Ollama Localhost (100% Local)",
-            ollamaDesc: "Connect to your local Ollama server (e.g. localhost:11434).",
-            apiKeyLabel: "API Key",
-            apiKeyPlaceholder: "Paste your API Key here...",
-            ollamaEndpointLabel: "Ollama Endpoint URL",
-            saveBtn: "Save Preferences",
-            savedNotice: "Settings saved successfully.",
         },
         bulletImprover: {
             suggestedRewrite: "Google XYZ Formula Suggestion",
