@@ -76,7 +76,7 @@ export default function Home() {
     }, [resumes, searchQuery, scoreFilter]);
 
     return (
-        <main className="min-h-screen bg-cyber-grid dark:bg-cyber-grid flex flex-col">
+        <main className="min-h-screen bg-cyber-grid flex flex-col transition-colors duration-300">
             <Navbar />
 
             {/* Delete confirmation modal */}

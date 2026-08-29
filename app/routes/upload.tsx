@@ -134,7 +134,7 @@ const Upload = () => {
     };
 
     return (
-        <main className="min-h-screen bg-cyber-grid dark:bg-cyber-grid flex flex-col">
+        <main className="min-h-screen bg-cyber-grid flex flex-col transition-colors duration-300">
             <Navbar />
 
             <div className="max-w-4xl mx-auto w-full px-4 sm:px-8 py-10 sm:py-16 space-y-8 flex-1">
