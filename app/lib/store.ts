@@ -729,16 +729,98 @@ export const useAppStore = create<AppStore>((set, get) => {
         }
     };
 
+    const runAIInference = async (message: string): Promise<string> => {
+        const config = getSettings();
+
+        // 1. Google Gemini API (if key provided)
+        if (config.provider === "gemini" && config.apiKey) {
+            try {
+                const res = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${config.apiKey}`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: message }] }],
+                            generationConfig: {
+                                responseMimeType: "application/json",
+                            },
+                        }),
+                    }
+                );
+                if (res.ok) {
+                    const data = await res.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (text) return text.trim();
+                }
+            } catch (err) {
+                console.warn("Gemini API error, using heuristic fallback:", err);
+            }
+        }
+
+        // 2. Groq Cloud API (if key provided)
+        if (config.provider === "groq" && config.apiKey) {
+            try {
+                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${config.apiKey}`,
+                    },
+                    body: JSON.stringify({
+                        model: "llama-3.1-8b-instant",
+                        messages: [{ role: "user", content: message }],
+                        response_format: { type: "json_object" },
+                    }),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const text = data.choices?.[0]?.message?.content;
+                    if (text) return text.trim();
+                }
+            } catch (err) {
+                console.warn("Groq API error, using heuristic fallback:", err);
+            }
+        }
+
+        // 3. Ollama Local (if endpoint provided)
+        if (config.provider === "ollama") {
+            try {
+                const endpoint = config.ollamaEndpoint || "http://localhost:11434";
+                const res = await fetch(`${endpoint}/api/generate`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model: config.model || "llama3",
+                        prompt: message,
+                        format: "json",
+                        stream: false,
+                    }),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.response) return data.response.trim();
+                }
+            } catch (err) {
+                console.warn("Ollama API error, using heuristic fallback:", err);
+            }
+        }
+
+        // Default & Fallback: Heuristic Engine
+        const fallbackAnalysis = analyzeResumeContent(message);
+        return JSON.stringify(fallbackAnalysis);
+    };
+
     const chat = async (
         prompt: string | ChatMessage[]
     ): Promise<AIResponse | undefined> => {
         const promptText = typeof prompt === "string" ? prompt : JSON.stringify(prompt);
-        const analysis = analyzeResumeContent(promptText);
+        const content = await runAIInference(promptText);
         return {
             index: 0,
             message: {
                 role: "assistant",
-                content: JSON.stringify(analysis),
+                content,
                 refusal: null,
                 annotations: [],
             },
@@ -750,12 +832,12 @@ export const useAppStore = create<AppStore>((set, get) => {
     };
 
     const feedback = async (_path: string, message: string): Promise<AIResponse | undefined> => {
-        const analysis = analyzeResumeContent(message);
+        const content = await runAIInference(message);
         return {
             index: 0,
             message: {
                 role: "assistant",
-                content: JSON.stringify(analysis),
+                content,
                 refusal: null,
                 annotations: [],
             },
