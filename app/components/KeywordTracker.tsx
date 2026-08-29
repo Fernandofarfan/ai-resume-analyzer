@@ -77,7 +77,7 @@ const KeywordTracker: React.FC<KeywordTrackerProps> = ({ keywords }) => {
                             ))
                         ) : (
                             <p className="text-xs text-slate-500 dark:text-slate-400 italic">
-                                No direct keyword matches detected.
+                                {t.keywords.noMatching}
                             </p>
                         )}
                     </div>

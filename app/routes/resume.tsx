@@ -1,6 +1,7 @@
 import { Link, useParams, useNavigate } from "react-router";
-import { useEffect, useState } from "react";
-import { useAppStore } from "~/lib/store";
+import { useEffect, useState, useMemo } from "react";
+import { useAppStore, generateResumeFeedback } from "~/lib/store";
+import { extractTextFromPdf } from "~/lib/pdf2img";
 import Summary from "~/components/Summary";
 import ATS from "~/components/ATS";
 import Details from "~/components/Details";
@@ -17,14 +18,13 @@ export const meta = () => [
 
 const Resume = () => {
     const { fs, kv } = useAppStore();
-    const { t } = useI18nStore();
+    const { t, language } = useI18nStore();
     const { id } = useParams();
     const navigate = useNavigate();
 
     const [imageUrl, setImageUrl] = useState("");
     const [resumeUrl, setResumeUrl] = useState("");
     const [resumeData, setResumeData] = useState<Resume | null>(null);
-    const [feedback, setFeedback] = useState<Feedback | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isCoverLetterOpen, setIsCoverLetterOpen] = useState(false);
 
@@ -37,13 +37,20 @@ const Resume = () => {
             if (!raw) return;
 
             const data: Resume = JSON.parse(raw);
-            setResumeData(data);
 
             const resumeBlob = await fs.read(data.resumePath);
             if (resumeBlob) {
                 const pdfBlob = new Blob([resumeBlob], { type: "application/pdf" });
                 resUrl = URL.createObjectURL(pdfBlob);
                 setResumeUrl(resUrl);
+
+                // If rawText wasn't stored, extract it now
+                if (!data.rawText) {
+                    const pdfFile = new File([pdfBlob], "resume.pdf", { type: "application/pdf" });
+                    const extracted = await extractTextFromPdf(pdfFile);
+                    data.rawText = extracted;
+                    await kv.set(`resume:${id}`, JSON.stringify(data));
+                }
             }
 
             const imageBlob = await fs.read(data.imagePath);
@@ -52,7 +59,7 @@ const Resume = () => {
                 setImageUrl(imgUrl);
             }
 
-            setFeedback(data.feedback);
+            setResumeData(data);
         };
 
         loadResume();
@@ -62,6 +69,12 @@ const Resume = () => {
             if (imgUrl) URL.revokeObjectURL(imgUrl);
         };
     }, [id]);
+
+    // Compute feedback dynamically in the current active language (ES or EN)
+    const activeFeedback = useMemo(() => {
+        if (!resumeData) return null;
+        return generateResumeFeedback(resumeData, language);
+    }, [resumeData, language]);
 
     const handleDelete = async () => {
         if (resumeData) {
@@ -165,14 +178,14 @@ const Resume = () => {
             )}
 
             {/* Cover Letter Modal */}
-            {feedback && (
+            {activeFeedback && (
                 <CoverLetterModal
                     isOpen={isCoverLetterOpen}
                     onClose={() => setIsCoverLetterOpen(false)}
                     companyName={resumeData?.companyName}
                     jobTitle={resumeData?.jobTitle}
                     jobDescription={resumeData?.jobDescription}
-                    feedback={feedback}
+                    feedback={activeFeedback}
                 />
             )}
 
@@ -210,7 +223,7 @@ const Resume = () => {
                             {imageUrl && resumeUrl ? (
                                 <div className="space-y-3">
                                     <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
-                                        <a href={resumeUrl} target="_blank" rel="noopener noreferrer" title="Abrir PDF completo">
+                                        <a href={resumeUrl} target="_blank" rel="noopener noreferrer" title={t.resume.openPdfNewTab}>
                                             <img
                                                 src={imageUrl}
                                                 alt="Preview"
@@ -219,20 +232,20 @@ const Resume = () => {
                                         </a>
                                     </div>
                                     <div className="flex items-center justify-between px-2 text-xs text-slate-500">
-                                        <span>Vista previa de documento</span>
+                                        <span>{t.resume.previewTitle}</span>
                                         <a
                                             href={resumeUrl}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
                                         >
-                                            Abrir PDF en pestaña nueva ↗
+                                            {t.resume.openPdfNewTab}
                                         </a>
                                     </div>
                                 </div>
                             ) : (
                                 <div className="h-96 flex items-center justify-center text-slate-400 text-sm">
-                                    Cargando vista previa...
+                                    {t.resume.loadingPreview}
                                 </div>
                             )}
                         </div>
@@ -240,29 +253,29 @@ const Resume = () => {
 
                     {/* Right Column: Diagnostic & ATS Sections */}
                     <div className="lg:col-span-7 space-y-6">
-                        {feedback ? (
+                        {activeFeedback ? (
                             <>
                                 {/* Overall Summary Gauge */}
-                                <Summary feedback={feedback} />
+                                <Summary feedback={activeFeedback} />
 
                                 {/* Keyword Gap Tracker */}
-                                {feedback.keywords && (
-                                    <KeywordTracker keywords={feedback.keywords} />
+                                {activeFeedback.keywords && (
+                                    <KeywordTracker keywords={activeFeedback.keywords} />
                                 )}
 
                                 {/* ATS Breakdown */}
                                 <ATS
-                                    score={feedback.ATS.score || feedback.overallScore}
-                                    suggestions={feedback.ATS.tips || []}
+                                    score={activeFeedback.ATS.score || activeFeedback.overallScore}
+                                    suggestions={activeFeedback.ATS.tips || []}
                                 />
 
                                 {/* Detailed Category Reviews with Google XYZ formula suggestions */}
-                                <Details feedback={feedback} />
+                                <Details feedback={activeFeedback} />
                             </>
                         ) : (
                             <div className="glass-card p-12 text-center space-y-4">
                                 <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                                <p className="text-sm text-slate-500">Generando diagnóstico...</p>
+                                <p className="text-sm text-slate-500">{t.resume.generatingDiagnosis}</p>
                             </div>
                         )}
                     </div>

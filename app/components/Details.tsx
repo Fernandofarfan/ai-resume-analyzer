@@ -81,7 +81,7 @@ const CategoryContent = ({
                                             onClick={() => handleCopy(rewrite.suggestedRewrite, index)}
                                             className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                                         >
-                                            {copiedIndex === index ? "✓ Copiado" : t.bulletImprover.applyIdea}
+                                            {copiedIndex === index ? t.bulletImprover.copied : t.bulletImprover.applyIdea}
                                         </button>
                                     </div>
                                     <p className="text-xs font-mono text-slate-800 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-950/80 p-2.5 rounded-lg border border-slate-200/60 dark:border-slate-800/60">

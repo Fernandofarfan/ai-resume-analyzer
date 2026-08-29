@@ -184,7 +184,10 @@ const STOPWORDS = new Set([
     "their", "there", "where", "which", "while", "when", "then", "them", "some", "such", "than",
     "each", "every", "more", "most", "other", "into", "only", "well", "must", "work", "team",
     "anos", "años", "years", "experiencia", "experience", "puesto", "role", "position", "ability",
-    "responsable", "responsibilities", "requisitos", "requirements", "conocimientos", "habilidades"
+    "responsable", "responsibilities", "requisitos", "requirements", "conocimientos", "habilidades",
+    "profesional", "professional", "trabajo", "job", "empresa", "company", "candidato", "candidate",
+    "curriculum", "currículum", "resume", "perfil", "profile", "titulo", "título", "title",
+    "descripcion", "descripción", "description", "laboral", "empleo", "oferta", "vacancy"
 ]);
 
 // Extract significant domain/tech keywords
@@ -206,35 +209,30 @@ const extractSignificantKeywords = (text: string): string[] => {
         .slice(0, 15);
 };
 
-// Heuristic ATS & Keyword Analysis Engine
-const analyzeResumeContent = (instructionMessage: string): Feedback => {
-    const isSpanish = /IDIOMA ESPAÑOL|puesto objetivo|currículum/i.test(instructionMessage);
+// Pure, deterministic ATS & Keyword Analysis Engine with dynamic language support
+export const generateResumeFeedback = (
+    resumeData: {
+        rawText?: string;
+        jobTitle?: string;
+        jobDescription?: string;
+    },
+    language: "es" | "en" = "es"
+): Feedback => {
+    const isSpanish = language === "es";
 
-    // 1. Extract job title
-    let jobTitle = isSpanish ? "Puesto Profesional" : "Professional Role";
-    const jobTitleMatch = instructionMessage.match(/(?:The job title is|El título del puesto objetivo es):\s*([^\n\r]*)/i);
-    if (jobTitleMatch && jobTitleMatch[1]?.trim() && !jobTitleMatch[1].includes("No especificado") && !jobTitleMatch[1].includes("Not specified")) {
-        jobTitle = jobTitleMatch[1].trim();
+    let jobTitle = resumeData.jobTitle?.trim() || "";
+    if (!jobTitle || jobTitle.includes("No especificado") || jobTitle.includes("Not specified")) {
+        jobTitle = isSpanish ? "Puesto Profesional" : "Professional Role";
     }
 
-    // 2. Extract job description
-    const jobDescMatch = instructionMessage.match(/(?:The job description is|La descripción de la oferta laboral es):\s*([^\n\r]*)/i);
-    const jobDesc = jobDescMatch && jobDescMatch[1]?.trim() && !jobDescMatch[1].includes("No especificada") && !jobDescMatch[1].includes("Not specified")
-        ? jobDescMatch[1].trim()
-        : "";
-
-    // 3. Extract resume text
-    let resumeText = "";
-    const resumeTextMatch = instructionMessage.match(/(?:--- INICIO CONTENIDO CV ---|--- START RESUME CONTENT ---)([\s\S]*?)(?:--- FIN CONTENIDO CV ---|--- END RESUME CONTENT ---)/i);
-    if (resumeTextMatch && resumeTextMatch[1]) {
-        resumeText = resumeTextMatch[1].trim();
-    }
+    const jobDesc = resumeData.jobDescription?.trim() || "";
+    const resumeText = resumeData.rawText?.trim() || "";
 
     const textLower = resumeText.toLowerCase();
     const wordCount = resumeText ? resumeText.split(/\s+/).filter(Boolean).length : 0;
 
     // --- Keyword Gap Analysis ---
-    const targetKeywords = extractSignificantKeywords(`${jobTitle} ${jobDesc}`);
+    const targetKeywords = extractSignificantKeywords(`${jobDesc ? jobDesc : jobTitle}`);
     const matchingKeywords: string[] = [];
     const missingKeywords: string[] = [];
 
@@ -633,6 +631,29 @@ const analyzeResumeContent = (instructionMessage: string): Feedback => {
             ],
         },
     };
+};
+
+const analyzeResumeContent = (instructionMessage: string): Feedback => {
+    const isSpanish = /IDIOMA ESPAÑOL|puesto objetivo|currículum/i.test(instructionMessage);
+
+    let jobTitle = isSpanish ? "Puesto Profesional" : "Professional Role";
+    const jobTitleMatch = instructionMessage.match(/(?:The job title is|El título del puesto objetivo es):\s*([^\n\r]*)/i);
+    if (jobTitleMatch && jobTitleMatch[1]?.trim() && !jobTitleMatch[1].includes("No especificado") && !jobTitleMatch[1].includes("Not specified")) {
+        jobTitle = jobTitleMatch[1].trim();
+    }
+
+    const jobDescMatch = instructionMessage.match(/(?:The job description is|La descripción de la oferta laboral es):\s*([^\n\r]*)/i);
+    const jobDescription = jobDescMatch && jobDescMatch[1]?.trim() && !jobDescMatch[1].includes("No especificada") && !jobDescMatch[1].includes("Not specified")
+        ? jobDescMatch[1].trim()
+        : "";
+
+    let rawText = "";
+    const resumeTextMatch = instructionMessage.match(/(?:--- INICIO CONTENIDO CV ---|--- START RESUME CONTENT ---)([\s\S]*?)(?:--- FIN CONTENIDO CV ---|--- END RESUME CONTENT ---)/i);
+    if (resumeTextMatch && resumeTextMatch[1]) {
+        rawText = resumeTextMatch[1].trim();
+    }
+
+    return generateResumeFeedback({ rawText, jobTitle, jobDescription }, isSpanish ? "es" : "en");
 };
 
 const defaultLocalUser: AppUser = {

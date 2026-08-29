@@ -142,7 +142,7 @@ const Upload = () => {
                 <div className="text-center space-y-3 max-w-2xl mx-auto">
                     <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider">
                         <span>⚡</span>
-                        <span>Auditoría de Compatibilidad</span>
+                        <span>{t.upload.badge}</span>
                     </div>
                     <h1 className="text-slate-900 dark:text-white">
                         {t.upload.heading}
@@ -169,7 +169,7 @@ const Upload = () => {
                                 {statusText}
                             </h2>
                             <p className="text-xs text-slate-400">
-                                Paso {progressStep} de 5 • Procesando datos
+                                {t.upload.stepProgress.replace("{step}", String(progressStep))}
                             </p>
                         </div>
 
@@ -230,7 +230,7 @@ const Upload = () => {
                                     placeholder={t.upload.jobDescriptionPlaceholder}
                                 />
                                 <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                                    💡 <em>Pegar los requisitos del puesto permite auditar palabras clave faltantes y evaluar tu compatibilidad exacta.</em>
+                                    💡 <em>{t.upload.jobDescTip}</em>
                                 </p>
                             </div>
 

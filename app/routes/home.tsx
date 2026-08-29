@@ -120,7 +120,7 @@ export default function Home() {
                 <div className="flex flex-col items-center text-center space-y-4 max-w-3xl mx-auto">
                     <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider">
                         <span>✨</span>
-                        <span>Motor ATS Inteligente & Heurístico</span>
+                        <span>{t.home.badge}</span>
                     </div>
 
                     <h1 className="text-slate-900 dark:text-white">
@@ -194,7 +194,7 @@ export default function Home() {
                     <div className="flex flex-col items-center justify-center py-16 space-y-4">
                         <div className="w-12 h-12 rounded-full border-4 border-indigo-500/20 border-t-indigo-600 animate-spin"></div>
                         <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
-                            Cargando currículums analizados...
+                            {t.home.loadingResumes}
                         </p>
                     </div>
                 ) : filteredResumes.length > 0 ? (
@@ -217,10 +217,10 @@ export default function Home() {
                     <div className="glass-card p-12 text-center max-w-md mx-auto space-y-3">
                         <span className="text-4xl">🔍</span>
                         <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                            No se encontraron resultados
+                            {t.home.noResultsTitle}
                         </h3>
                         <p className="text-xs text-slate-500">
-                            Prueba ajustando los filtros de búsqueda o el rango de puntuación.
+                            {t.home.noResultsDesc}
                         </p>
                     </div>
                 ) : (
@@ -233,7 +233,7 @@ export default function Home() {
                                 {t.home.noResumesTitle}
                             </h3>
                             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                                Sube tu archivo PDF y la oferta laboral para obtener un desglose completo de puntuación ATS y palabras clave faltantes.
+                                {t.home.emptyStateDesc}
                             </p>
                         </div>
                         <Link to="/upload" className="primary-button text-sm py-3 px-6 inline-flex">

@@ -54,7 +54,7 @@ const FileUploader = ({ onFileSelect }: FileUploaderProps) => {
                                     {file.name}
                                 </p>
                                 <p className="text-xs text-slate-400">
-                                    {formatSize(file.size)} • Listo para analizar
+                                    {formatSize(file.size)} • {t.upload.readyToAnalyze}
                                 </p>
                             </div>
                         </div>
@@ -65,7 +65,7 @@ const FileUploader = ({ onFileSelect }: FileUploaderProps) => {
                                 e.stopPropagation();
                                 onFileSelect?.(null);
                             }}
-                            title="Quitar archivo"
+                            title={t.upload.removeFile}
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

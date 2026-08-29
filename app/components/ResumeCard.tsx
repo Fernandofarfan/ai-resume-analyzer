@@ -90,7 +90,7 @@ const ResumeCard = ({
                         />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-slate-400">
-                            <span className="text-xs">Cargando vista previa...</span>
+                            <span className="text-xs">{t.resume.loadingPreview}</span>
                         </div>
                     )}
                 </div>
