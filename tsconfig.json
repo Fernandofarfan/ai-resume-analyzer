@@ -1,8 +1,11 @@
 {
   "include": [
-    "**/*",
-    "**/.server/**/*",
-    "**/.client/**/*",
+    "app/**/*",
+    "app/**/.server/**/*",
+    "app/**/.client/**/*",
+    "constants/**/*",
+    "types/**/*",
+    "scripts/**/*",
     ".react-router/types/**/*"
   ],
   "compilerOptions": {
@@ -21,6 +24,7 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "resolveJsonModule": true,
+    "allowJs": true,
     "skipLibCheck": true,
     "strict": true
   }

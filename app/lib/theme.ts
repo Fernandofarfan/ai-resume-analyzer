@@ -10,12 +10,20 @@ interface ThemeStore {
 
 const getInitialTheme = (): Theme => {
     if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("cvision_theme") as Theme;
-        if (saved === "light" || saved === "dark") {
-            return saved;
+        try {
+            const saved = localStorage.getItem("cvision_theme") as Theme;
+            if (saved === "light" || saved === "dark") {
+                return saved;
+            }
+        } catch {
+            // Storage access blocked or restricted
         }
-        if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-            return "dark";
+        try {
+            if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+                return "dark";
+            }
+        } catch {
+            // Media query match failed
         }
     }
     return "dark"; // Default to sleek modern dark mode
@@ -29,7 +37,11 @@ const applyThemeToDOM = (theme: Theme) => {
         } else {
             root.classList.remove("dark");
         }
-        localStorage.setItem("cvision_theme", theme);
+        try {
+            localStorage.setItem("cvision_theme", theme);
+        } catch {
+            // Storage access blocked or restricted
+        }
     }
 };
 

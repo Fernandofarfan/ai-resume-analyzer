@@ -28,6 +28,24 @@ export interface Translations {
         noResultsTitle: string;
         noResultsDesc: string;
         emptyStateDesc: string;
+        exportBackup: string;
+        importBackup: string;
+        importSuccess: string;
+        importError: string;
+        importPartial: string;
+        localStorageNotice: string;
+        storageQuota: string;
+        exportPasswordPrompt: string;
+        exportPasswordConfirm: string;
+        exportPasswordMismatch: string;
+        exportPasswordTooShort: string;
+        importPasswordPrompt: string;
+        importPasswordRequired: string;
+        importPasswordIncorrect: string;
+        importCorruptedArchive: string;
+        decryptButton: string;
+        cancelButton: string;
+        passwordPlaceholder: string;
     };
     upload: {
         pageTitle: string;
@@ -59,6 +77,27 @@ export interface Translations {
         errorConvertPdf: string;
         errorUploadImage: string;
         errorAnalyze: string;
+        errorSave: string;
+        errorStorageQuota: string;
+        privacyConsent: string;
+        cancelButton: string;
+        warningInvalidAI: string;
+        fileTooLarge: string;
+        fileInvalidType: string;
+        tooManyFiles: string;
+        fileRejected: string;
+        scannedPdfWarning: string;
+        scannedPdfError: string;
+        columnsWarning: string;
+        errorConsent: string;
+        errorUnauthorized: string;
+        apiKeyLabel: string;
+        apiKeyPlaceholder: string;
+        modeLocal: string;
+        modeRemote: string;
+        modeOllama: string;
+        modeUnknown: string;
+        modeServerUnavailable: string;
     };
     resume: {
         pageTitle: string;
@@ -84,6 +123,37 @@ export interface Translations {
         openPdfNewTab: string;
         loadingPreview: string;
         generatingDiagnosis: string;
+        sourceAI: string;
+        sourceHeuristic: string;
+        analyzedLabel: string;
+        reportNotFoundTitle: string;
+        reportNotFoundDesc: string;
+        reportErrorTitle: string;
+        reportErrorDesc: string;
+        storageErrorTitle: string;
+        storageErrorDesc: string;
+        deleteError: string;
+        deleting: string;
+        fallbackNotice: string;
+        scannedPdfWarning: string;
+        attachmentsStorageError: string;
+        attachmentsNoFiles: string;
+        attachmentsPartial: string;
+        confidenceLow: string;
+        confidenceMedium: string;
+        confidenceHigh: string;
+        confidenceLowHint: string;
+        confidenceMediumHint: string;
+        confidenceHighHint: string;
+        factorsTitle: string;
+        factorsSubtitle: string;
+        factorsList: {
+            textClarity: string;
+            jobMatch: string;
+            keywordsDensity: string;
+            metricsFormula: string;
+            structureAts: string;
+        };
         categories: {
             toneAndStyle: string;
             content: string;
@@ -100,6 +170,8 @@ export interface Translations {
         noMatching: string;
         noMissing: string;
         tipMissing: string;
+        notEvaluable: string;
+        notEvaluableHint: string;
     };
     coverLetter: {
         modalTitle: string;
@@ -107,6 +179,7 @@ export interface Translations {
         generating: string;
         copyBtn: string;
         copied: string;
+        copyError: string;
         downloadTxt: string;
         close: string;
         recipient: string;
@@ -117,6 +190,7 @@ export interface Translations {
         whyBetter: string;
         applyIdea: string;
         copied: string;
+        copyError: string;
     };
     theme: {
         toggleDark: string;
@@ -147,7 +221,7 @@ export const translations: Record<Language, Translations> = {
             defaultResumeTitle: "Currículum Profesional",
             searchPlaceholder: "Buscar por empresa, puesto o palabra clave...",
             filterAll: "Todos",
-            filterHigh: "Alto (> 80)",
+            filterHigh: "Alto (≥ 80)",
             filterMedium: "Medio (50-79)",
             filterLow: "Bajo (< 50)",
             resumesFound: "currículums encontrados",
@@ -155,6 +229,24 @@ export const translations: Record<Language, Translations> = {
             noResultsTitle: "No se encontraron resultados",
             noResultsDesc: "Prueba ajustando los filtros de búsqueda o el rango de puntuación.",
             emptyStateDesc: "Sube tu archivo PDF y la oferta laboral para obtener un desglose completo de puntuación ATS y palabras clave faltantes.",
+            exportBackup: "Exportar Copia (JSON)",
+            importBackup: "Importar Copia",
+            importSuccess: "Copia de seguridad restaurada correctamente ({count} currículums).",
+            importPartial: "Se restauraron {restored} currículums ({skipped} omitidos por errores).",
+            importError: "No se pudo restaurar el archivo: {error}",
+            localStorageNotice: "Almacenamiento 100% privado en tu navegador (IndexedDB)",
+            storageQuota: "Espacio local usado: {used} MB de {quota} MB ({percent}%)",
+            exportPasswordPrompt: "Opcional: Establece una contraseña para cifrar tu copia de seguridad (AES-GCM-256).\nDéjala en blanco para exportar sin cifrar:",
+            exportPasswordConfirm: "Confirma tu contraseña de cifrado:",
+            exportPasswordMismatch: "Las contraseñas no coinciden. Exportación cancelada.",
+            exportPasswordTooShort: "La contraseña debe tener al menos 6 caracteres.",
+            importPasswordPrompt: "Esta copia de seguridad está cifrada. Ingresa la contraseña para descifrar:",
+            importPasswordRequired: "Importación cancelada: Se requiere la contraseña para descifrar la copia de seguridad.",
+            importPasswordIncorrect: "Contraseña incorrecta o archivo de copia corrupto.",
+            importCorruptedArchive: "El archivo cifrado está dañado o no es válido.",
+            decryptButton: "Descifrar e Importar",
+            cancelButton: "Cancelar",
+            passwordPlaceholder: "Introduce la contraseña...",
         },
         upload: {
             pageTitle: "CVision AI | Subir y Analizar",
@@ -185,7 +277,28 @@ export const translations: Record<Language, Translations> = {
             errorUploadFile: "Error: No se pudo subir el archivo",
             errorConvertPdf: "Error: No se pudo procesar el PDF",
             errorUploadImage: "Error: Falló la generación de la vista previa",
-            errorAnalyze: "Error: Falló el análisis heurístico",
+            errorAnalyze: "Error: Falló el análisis",
+            errorSave: "Error: No se pudo guardar el análisis en el navegador",
+            errorStorageQuota: "Espacio de almacenamiento local insuficiente en tu navegador para procesar el archivo.",
+            privacyConsent: "Consiento que el contenido de mi currículum y la oferta laboral se envíen a un proveedor de IA externo para generar el análisis. Consulta la política de privacidad de dicho proveedor para conocer su retención de datos.",
+            cancelButton: "Cancelar",
+            warningInvalidAI: "La respuesta de la IA no tenía un formato válido. Se utilizó el análisis local.",
+            fileTooLarge: "El archivo supera el tamaño máximo de 20 MB.",
+            fileInvalidType: "Solo se aceptan archivos PDF.",
+            tooManyFiles: "Solo se puede subir un archivo a la vez.",
+            fileRejected: "No se pudo aceptar el archivo.",
+            scannedPdfWarning: "No se pudo extraer texto de este PDF; es posible que sea una imagen escaneada. El análisis se basará en datos limitados.",
+            scannedPdfError: "Este PDF parece ser una imagen escaneada: no se pudo extraer texto. Sube un PDF con texto seleccionable para poder analizarlo.",
+            columnsWarning: "Este PDF parece usar varias columnas. Revisa el texto extraído, ya que el análisis podría mezclar secciones.",
+            errorConsent: "Se requiere tu consentimiento para enviar el CV a un proveedor de IA externo.",
+            errorUnauthorized: "El servidor requiere autenticación. Configura el token de acceso o contacta al administrador.",
+            apiKeyLabel: "Token de Acceso a la API (Opcional)",
+            apiKeyPlaceholder: "Introduce el token si tu servidor lo requiere...",
+            modeLocal: "Modo actual: análisis local. El CV no sale de este dispositivo.",
+            modeRemote: "Modo actual: {provider}. El texto se enviará a este proveedor para generar el análisis.",
+            modeOllama: "Modo actual: Ollama (servidor local). El texto se envía a tu servidor local de Ollama.",
+            modeUnknown: "No se pudo determinar el modo del servidor. El análisis se realizará localmente.",
+            modeServerUnavailable: "Servidor no disponible. Se utilizará el motor de análisis local.",
         },
         resume: {
             pageTitle: "CVision AI | Reporte de Auditoría",
@@ -193,12 +306,12 @@ export const translations: Record<Language, Translations> = {
             backToHome: "Volver al Panel",
             reviewHeading: "Reporte de Diagnóstico ATS",
             overallScoreTitle: "Puntuación de Impacto Global",
-            overallScoreSub: "Evaluación calculada a partir de parseabilidad ATS, densidad de métricas, estructura y tono profesional.",
-            atsTitle: "Compatibilidad ATS",
+            overallScoreSub: "Estimación calculada a partir de parseabilidad ATS, densidad de métricas, estructura y tono profesional.",
+            atsTitle: "Estimación de Compatibilidad ATS",
             atsSubGood: "Perfil Altamente Competitivo",
             atsSubStart: "Buen Nivel Base",
             atsSubImprove: "Requiere Ajustes Críticos",
-            atsDescription: "Estimación del rendimiento de tu CV ante los algoritmos de filtrado automático (Applicant Tracking Systems).",
+            atsDescription: "Estimación basada en señales de contenido y estructura. No es una puntuación garantizada de ningún ATS específico.",
             atsEncouragement: "Optimiza los puntos señalados para aumentar exponencialmente tu tasa de conversión a entrevistas.",
             deleteResume: "Eliminar",
             deleteConfirmTitle: "¿Eliminar este análisis?",
@@ -211,6 +324,37 @@ export const translations: Record<Language, Translations> = {
             openPdfNewTab: "Abrir PDF en pestaña nueva ↗",
             loadingPreview: "Cargando vista previa...",
             generatingDiagnosis: "Generando diagnóstico...",
+            sourceAI: "Análisis generado por IA",
+            sourceHeuristic: "Análisis heurístico local",
+            analyzedLabel: "Analizado el",
+            reportNotFoundTitle: "Reporte no encontrado",
+            reportNotFoundDesc: "El análisis solicitado no existe o fue eliminado. Vuelve al panel para revisar tu historial.",
+            reportErrorTitle: "No se pudo cargar el reporte",
+            reportErrorDesc: "Ocurrió un error al leer los datos almacenados o el archivo puede estar corrupto.",
+            storageErrorTitle: "Almacenamiento no disponible",
+            storageErrorDesc: "El almacenamiento local del navegador no está disponible (posiblemente bloqueado o en modo privado). No se pudo leer el archivo.",
+            deleteError: "No se pudo eliminar por completo. Inténtalo de nuevo.",
+            deleting: "Eliminando…",
+            fallbackNotice: "El proveedor de IA no respondió. Se generó un análisis local alternativo.",
+            scannedPdfWarning: "Este PDF parece ser una imagen escaneada: no se pudo extraer texto. El análisis se basará en datos limitados.",
+            attachmentsStorageError: "Error de Almacenamiento",
+            attachmentsNoFiles: "Sin Archivos",
+            attachmentsPartial: "Parcial",
+            confidenceLow: "Confianza baja",
+            confidenceMedium: "Confianza media",
+            confidenceHigh: "Confianza alta",
+            confidenceLowHint: "Pocas señales disponibles (CV breve o sin oferta). Toma el resultado como orientativo.",
+            confidenceMediumHint: "Señales suficientes, pero con margen de mejora en el detalle del CV o la oferta.",
+            confidenceHighHint: "Basado en un CV detallado y una oferta laboral completa.",
+            factorsTitle: "Factores de Puntuación",
+            factorsSubtitle: "El puntaje es una estimación basada en 5 dimensiones objetivas de tu perfil:",
+            factorsList: {
+                textClarity: "Claridad y volumen del texto extraído del documento.",
+                jobMatch: "Alineación semántica con la descripción y requisitos del puesto.",
+                keywordsDensity: "Presencia y densidad de habilidades técnicas clave.",
+                metricsFormula: "Impacto numérico y logros medibles (Fórmula Google X-Y-Z).",
+                structureAts: "Estructura estándar, encabezados y formato legible para ATS.",
+            },
             categories: {
                 toneAndStyle: "Tono & Verbos de Acción",
                 content: "Impacto Cuantificado & Logros",
@@ -227,13 +371,16 @@ export const translations: Record<Language, Translations> = {
             noMatching: "No se detectaron coincidencias directas de palabras clave.",
             noMissing: "¡Excelente! Tu CV cubre los principales términos de la oferta.",
             tipMissing: "Tip: Incorpora estas palabras clave en tu sección de experiencia o habilidades para mejorar tu filtro ATS.",
+            notEvaluable: "No evaluable",
+            notEvaluableHint: "No se proporcionó una oferta laboral ni un puesto objetivo, por lo que no es posible calcular la coincidencia de palabras clave.",
         },
         coverLetter: {
-            modalTitle: "Carta de Presentación Personalizada",
-            subtitle: "Generada automáticamente alineando tu trayectoria con los requisitos de la vacante.",
+            modalTitle: "Borrador de Carta de Presentación",
+            subtitle: "Borrador generado localmente a partir de tu trayectoria y los requisitos de la vacante. Revísalo y personalízalo antes de enviarlo.",
             generating: "Redactando carta de presentación a medida...",
             copyBtn: "Copiar al Portapapeles",
             copied: "¡Copiado!",
+            copyError: "No se pudo copiar. Tu navegador bloqueó el acceso al portapapeles.",
             downloadTxt: "Descargar .TXT",
             close: "Cerrar",
             recipient: "Equipo de Selección / Hiring Manager",
@@ -244,6 +391,7 @@ export const translations: Record<Language, Translations> = {
             whyBetter: "Por qué funciona mejor:",
             applyIdea: "Copiar Sugerencia",
             copied: "✓ Copiado",
+            copyError: "No se pudo copiar. Tu navegador bloqueó el acceso al portapapeles.",
         },
         theme: {
             toggleDark: "Cambiar a Modo Oscuro",
@@ -272,7 +420,7 @@ export const translations: Record<Language, Translations> = {
             defaultResumeTitle: "Professional Resume",
             searchPlaceholder: "Search by company, role, or keyword...",
             filterAll: "All",
-            filterHigh: "High (> 80)",
+            filterHigh: "High (≥ 80)",
             filterMedium: "Medium (50-79)",
             filterLow: "Low (< 50)",
             resumesFound: "resumes found",
@@ -280,6 +428,24 @@ export const translations: Record<Language, Translations> = {
             noResultsTitle: "No results found",
             noResultsDesc: "Try adjusting your search query or score filters.",
             emptyStateDesc: "Upload your PDF resume and target job posting to get a full ATS breakdown and missing keyword report.",
+            exportBackup: "Export Backup (JSON)",
+            importBackup: "Import Backup",
+            importSuccess: "Backup successfully restored ({count} resumes).",
+            importPartial: "Restored {restored} resumes ({skipped} skipped due to errors).",
+            importError: "Failed to restore backup: {error}",
+            localStorageNotice: "100% Private local browser storage (IndexedDB)",
+            storageQuota: "Local storage used: {used} MB of {quota} MB ({percent}%)",
+            exportPasswordPrompt: "Optional: Set a password to encrypt your backup (AES-GCM-256).\nLeave blank to export unencrypted:",
+            exportPasswordConfirm: "Confirm your encryption password:",
+            exportPasswordMismatch: "Passwords do not match. Export cancelled.",
+            exportPasswordTooShort: "Password must be at least 6 characters.",
+            importPasswordPrompt: "This backup is password-protected. Enter password to decrypt:",
+            importPasswordRequired: "Import cancelled: Password is required to decrypt backup.",
+            importPasswordIncorrect: "Incorrect password or corrupted backup archive.",
+            importCorruptedArchive: "The encrypted file is damaged or invalid.",
+            decryptButton: "Decrypt & Import",
+            cancelButton: "Cancel",
+            passwordPlaceholder: "Enter password...",
         },
         upload: {
             pageTitle: "CVision AI | Upload & Analyze",
@@ -310,7 +476,28 @@ export const translations: Record<Language, Translations> = {
             errorUploadFile: "Error: Could not upload file",
             errorConvertPdf: "Error: Failed to process PDF",
             errorUploadImage: "Error: Failed to generate page preview",
-            errorAnalyze: "Error: Heuristic analysis failed",
+            errorAnalyze: "Error: Analysis failed",
+            errorSave: "Error: Could not save the analysis in the browser",
+            errorStorageQuota: "Insufficient local storage space in your browser to process this file.",
+            privacyConsent: "I consent to sending my resume content and the job description to an external AI provider to generate the analysis. Please review that provider's privacy policy for data retention details.",
+            cancelButton: "Cancel",
+            warningInvalidAI: "The AI response was not in a valid format. Local analysis was used instead.",
+            fileTooLarge: "The file exceeds the 20 MB size limit.",
+            fileInvalidType: "Only PDF files are accepted.",
+            tooManyFiles: "Only one file can be uploaded at a time.",
+            fileRejected: "The file could not be accepted.",
+            scannedPdfWarning: "No text could be extracted from this PDF; it may be a scanned image. Analysis will be based on limited data.",
+            scannedPdfError: "This PDF appears to be a scanned image: no text could be extracted. Upload a PDF with selectable text to analyze it.",
+            columnsWarning: "This PDF appears to use multiple columns. Review the extracted text, as the analysis may mix sections.",
+            errorConsent: "Your consent is required to send the resume to an external AI provider.",
+            errorUnauthorized: "The server requires authentication. Configure an access token or contact the administrator.",
+            apiKeyLabel: "API Access Token (Optional)",
+            apiKeyPlaceholder: "Enter authorization token if required by your server...",
+            modeLocal: "Current mode: local analysis. Your resume never leaves this device.",
+            modeRemote: "Current mode: {provider}. Your text will be sent to this provider to generate the analysis.",
+            modeOllama: "Current mode: Ollama (local server). Your text is sent to your local Ollama server.",
+            modeUnknown: "The server mode could not be determined. Analysis will run locally.",
+            modeServerUnavailable: "Server unavailable. Local analysis engine will be used.",
         },
         resume: {
             pageTitle: "CVision AI | Audit Report",
@@ -318,12 +505,12 @@ export const translations: Record<Language, Translations> = {
             backToHome: "Back to Dashboard",
             reviewHeading: "ATS Diagnostic Report",
             overallScoreTitle: "Overall Impact Score",
-            overallScoreSub: "Evaluated across ATS parseability, quantifiable achievements, layout hierarchy, and active tone.",
-            atsTitle: "ATS Compatibility",
+            overallScoreSub: "Estimated from ATS parseability, quantifiable achievements, layout hierarchy, and active tone.",
+            atsTitle: "Estimated ATS Compatibility",
             atsSubGood: "Highly Competitive Profile",
             atsSubStart: "Solid Foundation",
             atsSubImprove: "Critical Adjustments Needed",
-            atsDescription: "Estimated pass rate against automated Applicant Tracking Systems.",
+            atsDescription: "Estimate based on content and structure signals. It is not a guaranteed score for any specific ATS.",
             atsEncouragement: "Implement the recommendations below to substantially boost your recruiter response rate.",
             deleteResume: "Delete",
             deleteConfirmTitle: "Delete this audit?",
@@ -336,6 +523,37 @@ export const translations: Record<Language, Translations> = {
             openPdfNewTab: "Open PDF in new tab ↗",
             loadingPreview: "Loading preview...",
             generatingDiagnosis: "Generating diagnosis...",
+            sourceAI: "AI-generated analysis",
+            sourceHeuristic: "Local heuristic analysis",
+            analyzedLabel: "Analyzed on",
+            reportNotFoundTitle: "Report not found",
+            reportNotFoundDesc: "The requested analysis does not exist or was deleted. Return to the dashboard to review your history.",
+            reportErrorTitle: "Could not load report",
+            reportErrorDesc: "An error occurred while reading stored data, or the file may be corrupted.",
+            storageErrorTitle: "Storage unavailable",
+            storageErrorDesc: "Local browser storage is unavailable (possibly blocked or in private mode). The file could not be read.",
+            deleteError: "Could not fully delete the analysis. Please try again.",
+            deleting: "Deleting…",
+            fallbackNotice: "The AI provider was unavailable. A local alternative analysis was generated.",
+            scannedPdfWarning: "This PDF appears to be a scanned image: no text could be extracted. Analysis will be based on limited data.",
+            attachmentsStorageError: "Storage Error",
+            attachmentsNoFiles: "No Files",
+            attachmentsPartial: "Partial",
+            confidenceLow: "Low confidence",
+            confidenceMedium: "Medium confidence",
+            confidenceHigh: "High confidence",
+            confidenceLowHint: "Few signals available (short resume or no job posting). Treat the result as indicative.",
+            confidenceMediumHint: "Sufficient signals, but the resume or job posting could be more detailed.",
+            confidenceHighHint: "Based on a detailed resume and a complete job posting.",
+            factorsTitle: "Evaluation Factors",
+            factorsSubtitle: "The score is an estimate based on 5 objective profile dimensions:",
+            factorsList: {
+                textClarity: "Volume and readability of the extracted text content.",
+                jobMatch: "Semantic alignment with job description requirements.",
+                keywordsDensity: "Coverage and density of target domain skills.",
+                metricsFormula: "Measurable metrics and business impact (Google X-Y-Z formula).",
+                structureAts: "Standard section headings, layout, and ATS parseability.",
+            },
             categories: {
                 toneAndStyle: "Tone & Action Verbs",
                 content: "Quantified Impact & Scope",
@@ -352,13 +570,16 @@ export const translations: Record<Language, Translations> = {
             noMatching: "No direct keyword matches detected.",
             noMissing: "Outstanding! Your resume covers all core keywords from the job posting.",
             tipMissing: "Tip: Integrate these missing keywords into your experience bullet points or skills section to boost ATS ranking.",
+            notEvaluable: "Not evaluable",
+            notEvaluableHint: "No job posting or target role was provided, so keyword matching cannot be calculated.",
         },
         coverLetter: {
-            modalTitle: "Tailored Cover Letter",
-            subtitle: "Automatically drafted by aligning your background with the target job requirements.",
+            modalTitle: "Cover Letter Draft",
+            subtitle: "A locally generated draft based on your background and the job requirements. Review and personalize it before sending.",
             generating: "Drafting your tailored cover letter...",
             copyBtn: "Copy to Clipboard",
             copied: "Copied!",
+            copyError: "Copy failed. Your browser blocked clipboard access.",
             downloadTxt: "Download .TXT",
             close: "Close",
             recipient: "Hiring Team / Recruiting Manager",
@@ -369,6 +590,7 @@ export const translations: Record<Language, Translations> = {
             whyBetter: "Why this works better:",
             applyIdea: "Copy Suggestion",
             copied: "✓ Copied",
+            copyError: "Copy failed. Your browser blocked clipboard access.",
         },
         theme: {
             toggleDark: "Switch to Dark Mode",
@@ -389,9 +611,17 @@ interface I18nStore {
 
 const getInitialLanguage = (): Language => {
     if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("cvision_lang") as Language;
-        if (saved === "es" || saved === "en") return saved;
-        if (navigator.language.startsWith("es")) return "es";
+        try {
+            const saved = localStorage.getItem("cvision_lang") as Language;
+            if (saved === "es" || saved === "en") return saved;
+        } catch {
+            // Storage access restricted
+        }
+        try {
+            if (navigator?.language?.startsWith("es")) return "es";
+        } catch {
+            // Navigator access restricted
+        }
     }
     return "es"; // Default to Spanish
 };
@@ -400,7 +630,11 @@ export const useI18nStore = create<I18nStore>((set) => ({
     language: getInitialLanguage(),
     setLanguage: (lang: Language) => {
         if (typeof window !== "undefined") {
-            localStorage.setItem("cvision_lang", lang);
+            try {
+                localStorage.setItem("cvision_lang", lang);
+            } catch {
+                // Storage access restricted
+            }
         }
         set({
             language: lang,

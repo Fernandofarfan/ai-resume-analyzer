@@ -28,11 +28,11 @@ interface AccordionProps {
 }
 
 export const Accordion: React.FC<AccordionProps> = ({
-                                                        children,
-                                                        defaultOpen,
-                                                        allowMultiple = false,
-                                                        className = "",
-                                                    }) => {
+    children,
+    defaultOpen,
+    allowMultiple = false,
+    className = "",
+}) => {
     const [activeItems, setActiveItems] = useState<string[]>(
         defaultOpen ? [defaultOpen] : []
     );
@@ -67,10 +67,10 @@ interface AccordionItemProps {
 }
 
 export const AccordionItem: React.FC<AccordionItemProps> = ({
-                                                                id,
-                                                                children,
-                                                                className = "",
-                                                            }) => {
+    id,
+    children,
+    className = "",
+}) => {
     return (
         <div className={`overflow-hidden border-b border-slate-200/80 dark:border-slate-800/80 ${className}`}>
             {children}
@@ -87,14 +87,16 @@ interface AccordionHeaderProps {
 }
 
 export const AccordionHeader: React.FC<AccordionHeaderProps> = ({
-                                                                    itemId,
-                                                                    children,
-                                                                    className = "",
-                                                                    icon,
-                                                                    iconPosition = "right",
-                                                                }) => {
+    itemId,
+    children,
+    className = "",
+    icon,
+    iconPosition = "right",
+}) => {
     const { toggleItem, isItemActive } = useAccordion();
     const isActive = isItemActive(itemId);
+    const headerId = `accordion-header-${itemId}`;
+    const contentId = `accordion-content-${itemId}`;
 
     const defaultIcon = (
         <svg
@@ -105,6 +107,7 @@ export const AccordionHeader: React.FC<AccordionHeaderProps> = ({
             stroke="currentColor"
             viewBox="0 0 24 24"
             xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
         >
             <path
                 strokeLinecap="round"
@@ -121,10 +124,14 @@ export const AccordionHeader: React.FC<AccordionHeaderProps> = ({
 
     return (
         <button
+            type="button"
+            id={headerId}
             onClick={handleClick}
+            aria-expanded={isActive}
+            aria-controls={contentId}
             className={`
         w-full px-4 py-3 text-left
-        focus:outline-none
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-lg
         transition-colors duration-200 flex items-center justify-between cursor-pointer
         ${className}
       `}
@@ -145,15 +152,21 @@ interface AccordionContentProps {
 }
 
 export const AccordionContent: React.FC<AccordionContentProps> = ({
-                                                                      itemId,
-                                                                      children,
-                                                                      className = "",
-                                                                  }) => {
+    itemId,
+    children,
+    className = "",
+}) => {
     const { isItemActive } = useAccordion();
     const isActive = isItemActive(itemId);
+    const contentId = `accordion-content-${itemId}`;
+    const headerId = `accordion-header-${itemId}`;
 
     return (
         <div
+            id={contentId}
+            role="region"
+            aria-labelledby={headerId}
+            hidden={!isActive}
             className={`
         overflow-hidden transition-all duration-300 ease-in-out
         ${isActive ? "max-h-fit opacity-100" : "max-h-0 opacity-0"}

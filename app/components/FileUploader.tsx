@@ -4,30 +4,43 @@ import { formatSize } from "../lib/utils";
 import { useI18nStore } from "~/lib/i18n";
 
 interface FileUploaderProps {
+    file?: File | null;
     onFileSelect?: (file: File | null) => void;
 }
 
-const FileUploader = ({ onFileSelect }: FileUploaderProps) => {
+const FileUploader = ({ file = null, onFileSelect }: FileUploaderProps) => {
     const { t } = useI18nStore();
 
     const onDrop = useCallback((acceptedFiles: File[]) => {
-        const file = acceptedFiles[0] || null;
-        onFileSelect?.(file);
+        onFileSelect?.(acceptedFiles[0] || null);
     }, [onFileSelect]);
 
     const maxFileSize = 20 * 1024 * 1024; // 20MB in bytes
 
-    const { getRootProps, getInputProps, acceptedFiles, isDragActive } = useDropzone({
+    const { getRootProps, getInputProps, isDragActive, fileRejections } = useDropzone({
         onDrop,
         multiple: false,
         accept: { "application/pdf": [".pdf"] },
         maxSize: maxFileSize,
     });
 
-    const file = acceptedFiles[0] || null;
+    const rejectionMessage = (() => {
+        const rejection = fileRejections[0];
+        if (!rejection) return null;
+        const code = rejection.errors[0]?.code;
+        if (code === "file-too-large") return t.upload.fileTooLarge;
+        if (code === "file-invalid-type") return t.upload.fileInvalidType;
+        if (code === "too-many-files") return t.upload.tooManyFiles;
+        return t.upload.fileRejected;
+    })();
 
     return (
         <div className="w-full">
+            {rejectionMessage && (
+                <p role="alert" className="mb-2 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                    {rejectionMessage}
+                </p>
+            )}
             <div
                 {...getRootProps()}
                 className={`relative p-8 sm:p-10 rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer text-center ${
@@ -65,6 +78,7 @@ const FileUploader = ({ onFileSelect }: FileUploaderProps) => {
                                 e.stopPropagation();
                                 onFileSelect?.(null);
                             }}
+                            aria-label={t.upload.removeFile}
                             title={t.upload.removeFile}
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

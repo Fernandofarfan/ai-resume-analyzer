@@ -7,6 +7,7 @@ import {
 } from "./Accordion";
 import ScoreBadge from "~/components/ScoreBadge";
 import { useI18nStore } from "~/lib/i18n";
+import type { Feedback, BulletRewrite } from "~/domain/feedback";
 
 const CategoryHeader = ({
     title,
@@ -34,11 +35,21 @@ const CategoryContent = ({
 }) => {
     const { t } = useI18nStore();
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+    const [copyErrorIndex, setCopyErrorIndex] = useState<number | null>(null);
 
     const handleCopy = (text: string, idx: number) => {
-        navigator.clipboard.writeText(text);
-        setCopiedIndex(idx);
-        setTimeout(() => setCopiedIndex(null), 2000);
+        navigator.clipboard
+            .writeText(text)
+            .then(() => {
+                setCopiedIndex(idx);
+                setCopyErrorIndex(null);
+                setTimeout(() => setCopiedIndex(null), 2000);
+            })
+            .catch((err) => {
+                console.error("Failed to copy text:", err);
+                setCopyErrorIndex(idx);
+                setTimeout(() => setCopyErrorIndex(null), 3000);
+            });
     };
 
     return (
@@ -90,6 +101,11 @@ const CategoryContent = ({
                                     <p className="text-[10px] text-slate-400 dark:text-slate-500">
                                         {rewrite.reasoning}
                                     </p>
+                                    {copyErrorIndex === index && (
+                                        <p role="alert" className="text-[10px] text-rose-600 dark:text-rose-400">
+                                            {t.bulletImprover.copyError}
+                                        </p>
+                                    )}
                                 </div>
                             )}
                         </div>

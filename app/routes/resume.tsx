@@ -1,20 +1,35 @@
 import { Link, useParams, useNavigate } from "react-router";
-import { useEffect, useState, useMemo } from "react";
-import { useAppStore, generateResumeFeedback } from "~/lib/store";
-import { extractTextFromPdf } from "~/lib/pdf2img";
+import { useEffect, useState, useMemo, useRef } from "react";
+import {
+    useAppStore,
+    generateResumeFeedback,
+    getResumeEntity,
+    saveResumeEntity,
+    deleteResumeEntity,
+} from "~/lib/store";
+import { extractPdfText } from "~/lib/pdf2img";
+import { migrateResume } from "~/lib/migrations";
+import { StorageUnavailableError } from "~/lib/storage/indexeddb";
+import { notifyResumesChanged, withTabLock } from "~/lib/tabsync";
 import Summary from "~/components/Summary";
 import ATS from "~/components/ATS";
 import Details from "~/components/Details";
 import KeywordTracker from "~/components/KeywordTracker";
 import CoverLetterModal from "~/components/CoverLetterModal";
+import CoverLetterButton from "~/components/CoverLetterButton";
 import LanguageSelector from "~/components/LanguageSelector";
 import ThemeToggle from "~/components/ThemeToggle";
 import { useI18nStore } from "~/lib/i18n";
+import { useDialog } from "~/lib/useDialog";
+import type { Resume } from "~/domain/resume";
+import { buildResumeHeader, computeAttachmentsStatus } from "~/domain/resume";
 
 export const meta = () => [
     { title: "CVision AI | Detailed Resume Audit Report" },
     { name: "description", content: "Comprehensive ATS diagnosis, keyword gap analysis, and tailored recommendations." },
 ];
+
+type LoadState = "loading" | "ready" | "not-found" | "error" | "storage-error";
 
 const Resume = () => {
     const { fs, kv } = useAppStore();
@@ -25,64 +40,220 @@ const Resume = () => {
     const [imageUrl, setImageUrl] = useState("");
     const [resumeUrl, setResumeUrl] = useState("");
     const [resumeData, setResumeData] = useState<Resume | null>(null);
+    const [loadState, setLoadState] = useState<LoadState>("loading");
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isCoverLetterOpen, setIsCoverLetterOpen] = useState(false);
+    const [deleteError, setDeleteError] = useState("");
+    const [noTextWarning, setNoTextWarning] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const resumeUrlRef = useRef<string | null>(null);
+    const imageUrlRef = useRef<string | null>(null);
+    const loadSeqRef = useRef(0);
+    const lastFocusLoadRef = useRef(Date.now());
+
+    const deleteDialogRef = useDialog(showDeleteConfirm, () => setShowDeleteConfirm(false));
 
     useEffect(() => {
-        let resUrl: string | null = null;
-        let imgUrl: string | null = null;
+        let cancelled = false;
+
+        setLoadState("loading");
+        setResumeData(null);
+        setNoTextWarning(false);
+        if (resumeUrlRef.current) {
+            URL.revokeObjectURL(resumeUrlRef.current);
+            resumeUrlRef.current = null;
+        }
+        if (imageUrlRef.current) {
+            URL.revokeObjectURL(imageUrlRef.current);
+            imageUrlRef.current = null;
+        }
+        setResumeUrl("");
+        setImageUrl("");
 
         const loadResume = async () => {
-            const raw = await kv.get(`resume:${id}`);
-            if (!raw) return;
+            const seq = ++loadSeqRef.current;
+            if (!id) {
+                setLoadState("not-found");
+                return;
+            }
+            try {
+                // Try IndexedDB entity first (source of truth)
+                let data: Resume | null = await getResumeEntity(id);
 
-            const data: Resume = JSON.parse(raw);
+                if (cancelled || loadSeqRef.current !== seq) return;
 
-            const resumeBlob = await fs.read(data.resumePath);
-            if (resumeBlob) {
-                const pdfBlob = new Blob([resumeBlob], { type: "application/pdf" });
-                resUrl = URL.createObjectURL(pdfBlob);
-                setResumeUrl(resUrl);
+                // Fallback to localStorage legacy record with verified atomic migration
+                if (!data) {
+                    const raw = await kv.get(`resume:${id}`);
+                    if (cancelled || loadSeqRef.current !== seq) return;
+                    if (!raw) {
+                        setLoadState("not-found");
+                        return;
+                    }
+                    try {
+                        const rawObj = JSON.parse(raw);
+                        const migrated = migrateResume(rawObj);
+                        if (!migrated) {
+                            setLoadState("error");
+                            return;
+                        }
+                        const saveRes = await saveResumeEntity(migrated);
+                        if (!saveRes.success) {
+                            setLoadState("error");
+                            return;
+                        }
+                        data = saveRes.entity;
+                        // Replace legacy bulky record in localStorage with light index header
+                        const header = buildResumeHeader(saveRes.entity);
+                        await kv.set(`resume:${id}`, JSON.stringify(header));
+                    } catch {
+                        setLoadState("error");
+                        return;
+                    }
+                }
 
-                // If rawText wasn't stored, extract it now
-                if (!data.rawText) {
-                    const pdfFile = new File([pdfBlob], "resume.pdf", { type: "application/pdf" });
-                    const extracted = await extractTextFromPdf(pdfFile);
-                    data.rawText = extracted;
-                    await kv.set(`resume:${id}`, JSON.stringify(data));
+                if (cancelled || loadSeqRef.current !== seq) return;
+
+                const resumeBlob = await fs.read(data.resumePath);
+                if (cancelled || loadSeqRef.current !== seq) return;
+
+                let textWasExtracted = false;
+                if (resumeBlob) {
+                    const pdfBlob = new Blob([resumeBlob], { type: "application/pdf" });
+                    const newResUrl = URL.createObjectURL(pdfBlob);
+                    if (cancelled || loadSeqRef.current !== seq) {
+                        URL.revokeObjectURL(newResUrl);
+                        return;
+                    }
+                    if (resumeUrlRef.current) URL.revokeObjectURL(resumeUrlRef.current);
+                    resumeUrlRef.current = newResUrl;
+                    setResumeUrl(newResUrl);
+
+                    if (!data.rawText) {
+                        const pdfFile = new File([pdfBlob], "resume.pdf", { type: "application/pdf" });
+                        const extracted = await extractPdfText(pdfFile);
+                        if (cancelled || loadSeqRef.current !== seq) return;
+                        data.rawText = extracted;
+                        textWasExtracted = true;
+                        if (!extracted.trim()) setNoTextWarning(true);
+                    }
+                } else {
+                    if (resumeUrlRef.current) {
+                        URL.revokeObjectURL(resumeUrlRef.current);
+                        resumeUrlRef.current = null;
+                    }
+                    setResumeUrl("");
+                }
+
+                const imageBlob = await fs.read(data.imagePath);
+                if (cancelled || loadSeqRef.current !== seq) return;
+
+                if (imageBlob) {
+                    const newImgUrl = URL.createObjectURL(imageBlob);
+                    if (cancelled || loadSeqRef.current !== seq) {
+                        URL.revokeObjectURL(newImgUrl);
+                        return;
+                    }
+                    if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
+                    imageUrlRef.current = newImgUrl;
+                    setImageUrl(newImgUrl);
+                } else {
+                    if (imageUrlRef.current) {
+                        URL.revokeObjectURL(imageUrlRef.current);
+                        imageUrlRef.current = null;
+                    }
+                    setImageUrl("");
+                }
+
+                const verifiedStatus = computeAttachmentsStatus(Boolean(resumeBlob), Boolean(imageBlob));
+                if (data.attachmentsStatus !== verifiedStatus || textWasExtracted) {
+                    data.attachmentsStatus = verifiedStatus;
+                    const saveUpdated = await saveResumeEntity(data);
+                    if (saveUpdated.success) {
+                        data = saveUpdated.entity;
+                        const header = buildResumeHeader(data);
+                        await kv.set(`resume:${id}`, JSON.stringify(header));
+                    }
+                }
+
+                if (cancelled || loadSeqRef.current !== seq) return;
+                setResumeData(data);
+                setLoadState("ready");
+            } catch (err) {
+                if (!cancelled && loadSeqRef.current === seq) {
+                    setLoadState(err instanceof StorageUnavailableError ? "storage-error" : "error");
                 }
             }
-
-            const imageBlob = await fs.read(data.imagePath);
-            if (imageBlob) {
-                imgUrl = URL.createObjectURL(imageBlob);
-                setImageUrl(imgUrl);
-            }
-
-            setResumeData(data);
         };
 
         loadResume();
 
-        return () => {
-            if (resUrl) URL.revokeObjectURL(resUrl);
-            if (imgUrl) URL.revokeObjectURL(imgUrl);
+        const handleFocus = () => {
+            if (cancelled) return;
+            const now = Date.now();
+            if (now - lastFocusLoadRef.current < 2000) return;
+            lastFocusLoadRef.current = now;
+            loadResume();
         };
-    }, [id]);
+        window.addEventListener("focus", handleFocus);
 
-    // Compute feedback dynamically in the current active language (ES or EN)
+        return () => {
+            cancelled = true;
+            window.removeEventListener("focus", handleFocus);
+            if (resumeUrlRef.current) {
+                URL.revokeObjectURL(resumeUrlRef.current);
+                resumeUrlRef.current = null;
+            }
+            if (imageUrlRef.current) {
+                URL.revokeObjectURL(imageUrlRef.current);
+                imageUrlRef.current = null;
+            }
+        };
+    }, [id, fs, kv]);
+
+    // Prefer the stored AI/heuristic result. Only recompute locally when the
+    // record predates this behavior, is marked heuristic (so language switching
+    // stays live), or has no stored score.
     const activeFeedback = useMemo(() => {
         if (!resumeData) return null;
+        const saved = resumeData.feedback;
+        const hasSaved = !!saved && typeof saved.overallScore === "number";
+        // Only trust an explicitly AI-generated result; everything else (heuristic
+        // or legacy/unknown) is regenerated deterministically for the current language.
+        if (hasSaved && saved.source === "ai") return saved;
         return generateResumeFeedback(resumeData, language);
     }, [resumeData, language]);
 
     const handleDelete = async () => {
-        if (resumeData) {
-            if (resumeData.resumePath) await fs.delete(resumeData.resumePath);
-            if (resumeData.imagePath) await fs.delete(resumeData.imagePath);
+        if (!id) return;
+        setDeleteError("");
+        setIsDeleting(true);
+        try {
+            await withTabLock(`resume-delete-${id}`, async () => {
+                if (resumeData) {
+                    if (resumeData.resumePath) await fs.delete(resumeData.resumePath);
+                    if (resumeData.imagePath) await fs.delete(resumeData.imagePath);
+                }
+                const deletedEntity = await deleteResumeEntity(id);
+                const deletedKV = await kv.delete(`resume:${id}`);
+                if (!deletedEntity && !deletedKV) {
+                    throw new Error(t.resume.deleteError);
+                }
+            });
+
+            notifyResumesChanged({
+                type: "resume-deleted",
+                resumeId: id,
+                updatedAt: Date.now(),
+            });
+            navigate("/");
+        } catch (err) {
+            console.error("Failed to delete resume:", err);
+            setDeleteError(t.resume.deleteError);
+        } finally {
+            setIsDeleting(false);
         }
-        await kv.delete(`resume:${id}`);
-        navigate("/");
     };
 
     const handlePrint = () => {
@@ -107,21 +278,17 @@ const Resume = () => {
                     <ThemeToggle />
 
                     {/* Generate Cover Letter Button */}
-                    <button
-                        type="button"
+                    <CoverLetterButton
                         onClick={() => setIsCoverLetterOpen(true)}
                         className="secondary-button text-xs font-semibold py-1.5 px-3 hidden sm:inline-flex"
-                        title={t.resume.coverLetterBtn}
-                    >
-                        <span>✉️</span>
-                        <span>{t.resume.coverLetterBtn}</span>
-                    </button>
+                    />
 
                     {/* Export PDF */}
                     <button
                         type="button"
                         onClick={handlePrint}
-                        className="secondary-button text-xs font-semibold py-1.5 px-3"
+                        disabled={loadState !== "ready"}
+                        className="secondary-button text-xs font-semibold py-1.5 px-3 disabled:opacity-50 disabled:cursor-not-allowed"
                         title={t.resume.exportPdf}
                     >
                         <span>🖨️</span>
@@ -133,6 +300,7 @@ const Resume = () => {
                         type="button"
                         onClick={() => setShowDeleteConfirm(true)}
                         className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 rounded-xl transition-colors cursor-pointer"
+                        aria-label={t.resume.deleteResume}
                         title={t.resume.deleteResume}
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -144,33 +312,53 @@ const Resume = () => {
 
             {/* Delete Modal */}
             {showDeleteConfirm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 max-w-sm w-full shadow-2xl space-y-4">
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-in fade-in duration-200"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setShowDeleteConfirm(false);
+                    }}
+                >
+                    <div
+                        ref={deleteDialogRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="delete-dialog-title"
+                        aria-describedby="delete-dialog-description"
+                        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 max-w-sm w-full shadow-2xl space-y-4"
+                    >
                         <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-xl font-bold">
                             ⚠️
                         </div>
                         <div>
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                            <h3 id="delete-dialog-title" className="text-lg font-bold text-slate-900 dark:text-white">
                                 {t.resume.deleteConfirmTitle}
                             </h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            <p id="delete-dialog-description" className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                                 {t.resume.deleteConfirmMessage}
                             </p>
                         </div>
+                        {deleteError && (
+                            <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
+                                {deleteError}
+                            </p>
+                        )}
                         <div className="flex gap-3 pt-2">
                             <button
                                 type="button"
+                                data-autofocus
                                 onClick={() => setShowDeleteConfirm(false)}
-                                className="secondary-button flex-1 text-xs py-2.5"
+                                disabled={isDeleting}
+                                className="secondary-button flex-1 text-xs py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {t.resume.cancelDelete}
                             </button>
                             <button
                                 type="button"
                                 onClick={handleDelete}
-                                className="flex-1 px-4 py-2.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-colors cursor-pointer"
+                                disabled={isDeleting}
+                                className="flex-1 px-4 py-2.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {t.resume.confirmDelete}
+                                {isDeleting ? t.resume.deleting : t.resume.confirmDelete}
                             </button>
                         </div>
                     </div>
@@ -185,101 +373,157 @@ const Resume = () => {
                     companyName={resumeData?.companyName}
                     jobTitle={resumeData?.jobTitle}
                     jobDescription={resumeData?.jobDescription}
+                    resumeText={resumeData?.rawText}
                     feedback={activeFeedback}
                 />
             )}
 
             {/* Main Content Layout */}
             <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-8 py-8">
-                {/* Meta Header */}
-                <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200/80 dark:border-slate-800/80">
-                    <div>
-                        {resumeData?.companyName && (
-                            <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                                {resumeData.companyName}
-                            </span>
-                        )}
-                        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-                            {resumeData?.jobTitle || t.home.defaultResumeTitle}
-                        </h1>
+                {loadState === "loading" && (
+                    <div className="glass-card p-12 text-center space-y-4">
+                        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                        <p className="text-sm text-slate-500">{t.resume.loadingPreview}</p>
                     </div>
+                )}
 
-                    <div className="flex sm:hidden">
-                        <button
-                            type="button"
-                            onClick={() => setIsCoverLetterOpen(true)}
-                            className="secondary-button w-full text-xs"
-                        >
-                            <span>✉️</span>
-                            <span>{t.resume.coverLetterBtn}</span>
-                        </button>
+                {loadState === "not-found" && (
+                    <div className="glass-card p-12 text-center max-w-md mx-auto space-y-4">
+                        <span className="text-4xl">🔍</span>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                            {t.resume.reportNotFoundTitle}
+                        </h2>
+                        <p className="text-xs text-slate-500">{t.resume.reportNotFoundDesc}</p>
+                        <Link to="/" className="primary-button text-sm py-2.5 px-5 inline-flex">
+                            {t.resume.backToHome}
+                        </Link>
                     </div>
-                </div>
+                )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    {/* Left Column: PDF Preview (Sticky on desktop) */}
-                    <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
-                        <div className="glass-card p-4 rounded-3xl overflow-hidden shadow-lg border border-slate-200/80 dark:border-slate-800/80">
-                            {imageUrl && resumeUrl ? (
-                                <div className="space-y-3">
-                                    <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
-                                        <a href={resumeUrl} target="_blank" rel="noopener noreferrer" title={t.resume.openPdfNewTab}>
-                                            <img
-                                                src={imageUrl}
-                                                alt="Preview"
-                                                className="w-full h-auto max-h-[600px] object-contain hover:scale-101 transition-transform duration-200"
-                                            />
-                                        </a>
-                                    </div>
-                                    <div className="flex items-center justify-between px-2 text-xs text-slate-500">
-                                        <span>{t.resume.previewTitle}</span>
-                                        <a
-                                            href={resumeUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
-                                        >
-                                            {t.resume.openPdfNewTab}
-                                        </a>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="h-96 flex items-center justify-center text-slate-400 text-sm">
-                                    {t.resume.loadingPreview}
-                                </div>
-                            )}
-                        </div>
+                {loadState === "error" && (
+                    <div className="glass-card p-12 text-center max-w-md mx-auto space-y-4">
+                        <span className="text-4xl">⚠️</span>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                            {t.resume.reportErrorTitle}
+                        </h2>
+                        <p className="text-xs text-slate-500">{t.resume.reportErrorDesc}</p>
+                        <Link to="/" className="primary-button text-sm py-2.5 px-5 inline-flex">
+                            {t.resume.backToHome}
+                        </Link>
                     </div>
+                )}
 
-                    {/* Right Column: Diagnostic & ATS Sections */}
-                    <div className="lg:col-span-7 space-y-6">
-                        {activeFeedback ? (
-                            <>
-                                {/* Overall Summary Gauge */}
-                                <Summary feedback={activeFeedback} />
+                {loadState === "storage-error" && (
+                    <div className="glass-card p-12 text-center max-w-md mx-auto space-y-4">
+                        <span className="text-4xl">🗄️</span>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                            {t.resume.storageErrorTitle}
+                        </h2>
+                        <p className="text-xs text-slate-500">{t.resume.storageErrorDesc}</p>
+                        <Link to="/" className="primary-button text-sm py-2.5 px-5 inline-flex">
+                            {t.resume.backToHome}
+                        </Link>
+                    </div>
+                )}
 
-                                {/* Keyword Gap Tracker */}
-                                {activeFeedback.keywords && (
-                                    <KeywordTracker keywords={activeFeedback.keywords} />
-                                )}
-
-                                {/* ATS Breakdown */}
-                                <ATS
-                                    score={activeFeedback.ATS.score || activeFeedback.overallScore}
-                                    suggestions={activeFeedback.ATS.tips || []}
-                                />
-
-                                {/* Detailed Category Reviews with Google XYZ formula suggestions */}
-                                <Details feedback={activeFeedback} />
-                            </>
-                        ) : (
-                            <div className="glass-card p-12 text-center space-y-4">
-                                <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                                <p className="text-sm text-slate-500">{t.resume.generatingDiagnosis}</p>
+                {loadState === "ready" && resumeData && (
+                    <>
+                        {noTextWarning && (
+                            <div
+                                role="alert"
+                                className="mb-6 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300"
+                            >
+                                {t.resume.scannedPdfWarning}
                             </div>
                         )}
-                    </div>
-                </div>
+
+                        {/* Meta Header */}
+                        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200/80 dark:border-slate-800/80">
+                            <div>
+                                {resumeData.companyName && (
+                                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                        {resumeData.companyName}
+                                    </span>
+                                )}
+                                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
+                                    {resumeData.jobTitle || t.home.defaultResumeTitle}
+                                </h1>
+                            </div>
+
+                            <div className="flex sm:hidden">
+                                <CoverLetterButton
+                                    onClick={() => setIsCoverLetterOpen(true)}
+                                    className="secondary-button w-full text-xs justify-center"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                            {/* Left Column: PDF Preview (Sticky on desktop) */}
+                            <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
+                                <div className="glass-card p-4 rounded-3xl overflow-hidden shadow-lg border border-slate-200/80 dark:border-slate-800/80">
+                                    {imageUrl && resumeUrl ? (
+                                        <div className="space-y-3">
+                                            <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
+                                                <a href={resumeUrl} target="_blank" rel="noopener noreferrer" title={t.resume.openPdfNewTab}>
+                                                    <img
+                                                        src={imageUrl}
+                                                        alt={t.resume.previewTitle}
+                                                        className="w-full h-auto max-h-[600px] object-contain hover:scale-101 transition-transform duration-200"
+                                                    />
+                                                </a>
+                                            </div>
+                                            <div className="flex items-center justify-between px-2 text-xs text-slate-500">
+                                                <span>{t.resume.previewTitle}</span>
+                                                <a
+                                                    href={resumeUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
+                                                >
+                                                    {t.resume.openPdfNewTab}
+                                                </a>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="h-96 flex items-center justify-center text-slate-400 text-sm">
+                                            {t.resume.loadingPreview}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Right Column: Diagnostic & ATS Sections */}
+                            <div className="lg:col-span-7 space-y-6">
+                                {activeFeedback ? (
+                                    <>
+                                        {/* Overall Summary Gauge */}
+                                        <Summary feedback={activeFeedback} analyzedAt={resumeData.analyzedAt} />
+
+                                        {/* Keyword Gap Tracker */}
+                                        {activeFeedback.keywords && (
+                                            <KeywordTracker keywords={activeFeedback.keywords} />
+                                        )}
+
+                                        {/* ATS Breakdown */}
+                                        <ATS
+                                            score={activeFeedback.ATS.score || activeFeedback.overallScore}
+                                            suggestions={activeFeedback.ATS.tips || []}
+                                        />
+
+                                        {/* Detailed Category Reviews with Google XYZ formula suggestions */}
+                                        <Details feedback={activeFeedback} />
+                                    </>
+                                ) : (
+                                    <div className="glass-card p-12 text-center space-y-4">
+                                        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                        <p className="text-sm text-slate-500">{t.resume.generatingDiagnosis}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
         </main>
     );

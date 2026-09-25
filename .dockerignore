@@ -2,3 +2,13 @@
 build
 node_modules
 README.md
+.env
+.env.local
+.env.*.local
+.git
+.github
+*.test.ts
+*.test.mjs
+coverage
+playwright-report
+test-results

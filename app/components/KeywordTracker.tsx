@@ -1,5 +1,6 @@
 import React from "react";
 import { useI18nStore } from "~/lib/i18n";
+import type { KeywordAnalysis } from "~/domain/feedback";
 
 interface KeywordTrackerProps {
     keywords?: KeywordAnalysis;
@@ -11,6 +12,7 @@ const KeywordTracker: React.FC<KeywordTrackerProps> = ({ keywords }) => {
     if (!keywords) return null;
 
     const { matchScore, matching = [], missing = [] } = keywords;
+    const evaluable = typeof matchScore === "number";
 
     return (
         <div className="glass-card p-6 w-full space-y-6">
@@ -30,32 +32,46 @@ const KeywordTracker: React.FC<KeywordTrackerProps> = ({ keywords }) => {
                         <span className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
                             {t.keywords.matchRate}
                         </span>
-                        <p className={`text-2xl font-black ${
-                            matchScore >= 75
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : matchScore >= 50
-                                ? "text-amber-600 dark:text-amber-400"
-                                : "text-rose-600 dark:text-rose-400"
-                        }`}>
-                            {matchScore}%
-                        </p>
+                        {evaluable ? (
+                            <p className={`text-2xl font-black ${
+                                (matchScore as number) >= 75
+                                    ? "text-emerald-600 dark:text-emerald-400"
+                                    : (matchScore as number) >= 50
+                                    ? "text-amber-600 dark:text-amber-400"
+                                    : "text-rose-600 dark:text-rose-400"
+                            }`}>
+                                {matchScore}%
+                            </p>
+                        ) : (
+                            <p className="text-sm font-bold text-slate-400 dark:text-slate-500">
+                                {t.keywords.notEvaluable}
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>
 
             {/* Progress Bar */}
-            <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-3 overflow-hidden p-0.5">
-                <div
-                    className={`h-full rounded-full transition-all duration-1000 ${
-                        matchScore >= 75
-                            ? "bg-gradient-to-r from-emerald-500 to-teal-400"
-                            : matchScore >= 50
-                            ? "bg-gradient-to-r from-amber-500 to-yellow-400"
-                            : "bg-gradient-to-r from-rose-500 to-red-400"
-                    }`}
-                    style={{ width: `${Math.max(5, matchScore)}%` }}
-                />
-            </div>
+            {evaluable && (
+                <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-3 overflow-hidden p-0.5">
+                    <div
+                        className={`h-full rounded-full transition-all duration-1000 ${
+                            (matchScore as number) >= 75
+                                ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+                                : (matchScore as number) >= 50
+                                ? "bg-gradient-to-r from-amber-500 to-yellow-400"
+                                : "bg-gradient-to-r from-rose-500 to-red-400"
+                        }`}
+                        style={{ width: `${Math.max(5, matchScore as number)}%` }}
+                    />
+                </div>
+            )}
+
+            {!evaluable && (
+                <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+                    {t.keywords.notEvaluableHint}
+                </div>
+            )}
 
             {/* Grid of Keywords */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -1,12 +1,28 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import Navbar from "~/components/Navbar";
 import FileUploader from "~/components/FileUploader";
-import { useAppStore } from "~/lib/store";
+import {
+    useAppStore,
+    generateResumeFeedback,
+    computeConfidence,
+    extractProfileSignals,
+    saveResumeEntity,
+    getResumeEntity,
+    deleteResumeEntity,
+    estimateStorageQuota,
+} from "~/lib/store";
 import { useNavigate } from "react-router";
-import { convertPdfToImage, extractTextFromPdf } from "~/lib/pdf2img";
+import { processPdf } from "~/lib/pdf2img";
 import { generateUUID } from "~/lib/utils";
 import { prepareInstructions } from "../../constants";
 import { useI18nStore } from "~/lib/i18n";
+import { parseFeedbackText } from "~/lib/ai/schema";
+import { fetchProviderConfig, ConsentRequiredError, UnauthorizedError } from "~/lib/ai/providers";
+import { RESUME_SCHEMA_VERSION } from "~/lib/migrations";
+import { notifyResumesChanged, withTabLock } from "~/lib/tabsync";
+import type { Resume } from "~/domain/resume";
+import { buildResumeHeader } from "~/domain/resume";
+import type { Feedback } from "~/domain/feedback";
 
 export const meta = () => [
     { title: "CVision AI | Upload & Analyze Resume" },
@@ -17,169 +33,430 @@ const Upload = () => {
     const { fs, ai, kv } = useAppStore();
     const { t, language } = useI18nStore();
     const navigate = useNavigate();
+
     const [isProcessing, setIsProcessing] = useState(false);
     const [statusText, setStatusText] = useState("");
+    const [errorText, setErrorText] = useState("");
+    const [warningText, setWarningText] = useState("");
     const [progressStep, setProgressStep] = useState(1);
     const [file, setFile] = useState<File | null>(null);
+    const [fileKey, setFileKey] = useState(0);
+    const [consentRequired, setConsentRequired] = useState(false);
+    const [consentChecked, setConsentChecked] = useState(false);
+    const [requiresAuth, setRequiresAuth] = useState(false);
+    const [apiKey, setApiKey] = useState(() => {
+        try {
+            if (typeof sessionStorage !== "undefined") {
+                return sessionStorage.getItem("cvision_api_key") || "";
+            }
+        } catch {
+            // Storage disabled
+        }
+        return "";
+    });
+    const [configLoaded, setConfigLoaded] = useState(false);
+    const [providerMode, setProviderMode] = useState<"offline" | "gemini" | "groq" | "ollama" | "unknown">("offline");
+    const [providerStatus, setProviderStatus] = useState<"ready" | "offline" | "server-unavailable">("offline");
 
-    const handleFileSelect = (file: File | null) => {
-        setFile(file);
+    const abortRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        let mounted = true;
+        fetchProviderConfig().then((cfg) => {
+            if (mounted) {
+                setConsentRequired(cfg.requiresConsent);
+                setRequiresAuth(cfg.requiresAuth === true);
+                const validModes: Record<string, "offline" | "gemini" | "groq" | "ollama"> = {
+                    offline: "offline",
+                    gemini: "gemini",
+                    groq: "groq",
+                    ollama: "ollama",
+                };
+                setProviderMode(validModes[cfg.provider] || "unknown");
+                setProviderStatus(cfg.status);
+                setConfigLoaded(true);
+            }
+        });
+        return () => {
+            mounted = false;
+            abortRef.current?.abort();
+        };
+    }, []);
+
+    const handleFileSelect = (selected: File | null) => {
+        setFile(selected);
+        setErrorText("");
+        setWarningText("");
+        setFileKey((k) => k + 1);
     };
 
-    const handleAnalyze = async ({
-        companyName,
-        jobTitle,
-        jobDescription,
-        file,
-    }: {
-        companyName: string;
-        jobTitle: string;
-        jobDescription: string;
-        file: File;
-    }) => {
-        setIsProcessing(true);
-        setProgressStep(1);
-
-        try {
-            setStatusText(t.upload.statusUploading);
-            const uploadedFile = await fs.upload([file]);
-            if (!uploadedFile) {
-                setStatusText(t.upload.errorUploadFile);
-                setIsProcessing(false);
-                return;
-            }
-
-            setProgressStep(2);
-            setStatusText(t.upload.statusConverting);
-            const imageFile = await convertPdfToImage(file);
-            if (!imageFile.file) {
-                setStatusText(t.upload.errorConvertPdf);
-                setIsProcessing(false);
-                return;
-            }
-
-            setProgressStep(3);
-            setStatusText(t.upload.statusUploadingImage);
-            const resumeText = await extractTextFromPdf(file);
-
-            const uploadedImage = await fs.upload([imageFile.file]);
-            if (!uploadedImage) {
-                setStatusText(t.upload.errorUploadImage);
-                setIsProcessing(false);
-                return;
-            }
-
-            setProgressStep(4);
-            setStatusText(t.upload.statusPreparing);
-            const uuid = generateUUID();
-            const data: Resume = {
-                id: uuid,
-                resumePath: uploadedFile.path,
-                imagePath: uploadedImage.path,
-                companyName,
-                jobTitle,
-                jobDescription,
-                rawText: resumeText,
-                feedback: {} as Feedback,
-            };
-            await kv.set(`resume:${uuid}`, JSON.stringify(data));
-
-            setProgressStep(5);
-            setStatusText(t.upload.statusAnalyzing);
-
-            const feedback = await ai.feedback(
-                uploadedFile.path,
-                prepareInstructions({ jobTitle, jobDescription, language, resumeText })
-            );
-            if (!feedback) {
-                setStatusText(t.upload.errorAnalyze);
-                setIsProcessing(false);
-                return;
-            }
-
-            const feedbackText =
-                typeof feedback.message.content === "string"
-                    ? feedback.message.content
-                    : feedback.message.content[0].text;
-
+    const cleanupBlobs = async (paths: string[]) => {
+        for (const p of paths) {
             try {
-                data.feedback = JSON.parse(feedbackText);
+                await fs.delete(p);
             } catch {
-                data.feedback = feedbackText as any;
+                // Ignore cleanup errors
             }
-
-            await kv.set(`resume:${uuid}`, JSON.stringify(data));
-            setStatusText(t.upload.statusComplete);
-            navigate(`/resume/${uuid}`);
-        } catch (err) {
-            console.error("Analysis failed:", err);
-            setStatusText(t.upload.errorAnalyze);
-            setIsProcessing(false);
         }
     };
 
-    const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        const form = e.currentTarget.closest("form");
-        if (!form) return;
-        const formData = new FormData(form);
-
-        const companyName = (formData.get("company-name") as string) || "";
-        const jobTitle = (formData.get("job-title") as string) || "";
-        const jobDescription = (formData.get("job-description") as string) || "";
-
-        if (!file) return;
-
-        handleAnalyze({ companyName, jobTitle, jobDescription, file });
+    const handleCancel = () => {
+        abortRef.current?.abort();
+        setIsProcessing(false);
+        setStatusText("");
+        setProgressStep(1);
+        setErrorText("");
     };
 
+    const canSubmit = !!file && !isProcessing && configLoaded && (!consentRequired || consentChecked);
+
+    const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setErrorText("");
+        setWarningText("");
+
+        if (!file) return;
+        if (consentRequired && !consentChecked) {
+            setErrorText(t.upload.errorConsent);
+            return;
+        }
+
+        // Check available storage before processing
+        const quota = await estimateStorageQuota();
+        if (quota && quota.quotaBytes > 0) {
+            const freeBytes = quota.quotaBytes - quota.usageBytes;
+            if (freeBytes < 15 * 1024 * 1024 || quota.percentUsed >= 98) {
+                setErrorText(t.upload.errorStorageQuota);
+                return;
+            }
+        }
+
+        const form = e.currentTarget;
+        const formData = new FormData(form);
+        const jobTitle = ((formData.get("job-title") as string) || "").trim();
+        const jobDescription = ((formData.get("job-description") as string) || "").trim();
+        const companyName = ((formData.get("company-name") as string) || "").trim();
+
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const signal = controller.signal;
+
+        setIsProcessing(true);
+        setStatusText(t.upload.statusUploading);
+        setProgressStep(1);
+
+        const createdPaths: string[] = [];
+        let resumeId: string | null = null;
+        let resumeKey: string | null = null;
+        let completed = false;
+        let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
+        try {
+            const uuid = generateUUID();
+            resumeId = uuid;
+            resumeKey = `resume:${uuid}`;
+
+            const uploadedFile = await fs.upload([file]);
+            if (!uploadedFile) {
+                throw new Error(t.upload.errorUploadFile);
+            }
+            createdPaths.push(uploadedFile.path);
+
+            if (signal.aborted) return;
+
+            const initialEntity: Resume = {
+                id: uuid,
+                schemaVersion: RESUME_SCHEMA_VERSION,
+                jobTitle,
+                companyName,
+                jobDescription,
+                resumePath: uploadedFile.path,
+                imagePath: "",
+                rawText: "",
+                status: "processing",
+                processingStartedAt: Date.now(),
+                heartbeatAt: Date.now(),
+                updatedAt: Date.now(),
+                feedback: {} as Feedback,
+            };
+
+            const initialRes = await saveResumeEntity(initialEntity);
+            if (!initialRes.success) {
+                throw new Error(t.upload.errorSave || "Failed to save initial resume state");
+            }
+            heartbeatInterval = setInterval(async () => {
+                try {
+                    const current = await getResumeEntity(uuid);
+                    if (current && current.status === "processing") {
+                        await saveResumeEntity({
+                            ...current,
+                            heartbeatAt: Date.now(),
+                            updatedAt: Date.now(),
+                        });
+                    }
+                } catch {
+                    // Ignore transient heartbeat save errors
+                }
+            }, 5000);
+
+            if (signal.aborted) return;
+
+            setStatusText(t.upload.statusConverting);
+            setProgressStep(2);
+
+            const { text: resumeText, image: imageFile, noText, hasMultipleColumns, error: pdfError } = await processPdf(
+                file,
+                signal
+            );
+            if (signal.aborted) return;
+            if (pdfError) {
+                throw new Error(t.upload.errorConvertPdf);
+            }
+            if (noText) {
+                throw new Error(t.upload.scannedPdfError);
+            }
+            if (hasMultipleColumns) {
+                setWarningText(t.upload.columnsWarning);
+            }
+
+            if (signal.aborted) return;
+
+            let imagePath = "";
+            if (imageFile) {
+                setStatusText(t.upload.statusUploadingImage);
+                const uploadedImage = await fs.upload([imageFile]);
+                if (uploadedImage) {
+                    imagePath = uploadedImage.path;
+                    createdPaths.push(imagePath);
+                }
+            }
+
+            if (signal.aborted) return;
+
+            setStatusText(t.upload.statusPreparing);
+            setProgressStep(3);
+
+            const prompt = prepareInstructions(
+                { resumeText, jobTitle, jobDescription, language }
+            );
+
+            setStatusText(t.upload.statusAnalyzing);
+            setProgressStep(4);
+
+            let feedback;
+            let fallbackOccurred = false;
+
+            if (providerStatus === "server-unavailable" || providerMode === "offline") {
+                const fallbackAnalysis = generateResumeFeedback(
+                    { rawText: resumeText, jobTitle, jobDescription },
+                    language
+                );
+                feedback = {
+                    message: { content: JSON.stringify(fallbackAnalysis) },
+                    source: "heuristic" as const,
+                    fallbackReason: providerStatus === "server-unavailable" ? "offline-mode" as const : undefined,
+                };
+            } else {
+                try {
+                    feedback = await ai.feedback(prompt, consentChecked, signal);
+                    if (!feedback || !feedback.message?.content) {
+                        fallbackOccurred = true;
+                    }
+                } catch (aiErr) {
+                    if (signal.aborted) throw aiErr;
+                    if (aiErr instanceof ConsentRequiredError || aiErr instanceof UnauthorizedError) throw aiErr;
+                    console.warn("ai.feedback failed, falling back to local:", aiErr);
+                    fallbackOccurred = true;
+                }
+            }
+
+            if (signal.aborted) return;
+
+            const feedbackText =
+                typeof feedback?.message?.content === "string"
+                    ? feedback.message.content
+                    : "";
+
+            const data: Resume = {
+                id: uuid,
+                schemaVersion: RESUME_SCHEMA_VERSION,
+                analyzedAt: Date.now(),
+                updatedAt: Date.now(),
+                resumePath: uploadedFile.path,
+                imagePath,
+                jobTitle,
+                companyName,
+                jobDescription,
+                rawText: resumeText,
+                status: "completed",
+                version: 1,
+                feedback: {} as Feedback,
+            };
+
+            const parsed = parseFeedbackText(feedbackText);
+            const wordCount = resumeText ? resumeText.split(/\s+/).filter(Boolean).length : 0;
+            const signals = extractProfileSignals(resumeText);
+
+            if (parsed) {
+                data.feedback = {
+                    ...parsed,
+                    source: feedback?.source ?? "heuristic",
+                    fallbackReason: feedback?.fallbackReason,
+                    confidence: computeConfidence({
+                        wordCount,
+                        targetKeywordCount:
+                            (parsed.keywords?.matching?.length ?? 0) +
+                            (parsed.keywords?.missing?.length ?? 0),
+                        hasJobDescription: !!jobDescription.trim(),
+                        metricCount: signals.quantifiedAchievements,
+                        hasResumeText: !!resumeText,
+                    }),
+                };
+            } else {
+                data.feedback = {
+                    ...generateResumeFeedback(
+                        { rawText: resumeText, jobTitle, jobDescription },
+                        language
+                    ),
+                    fallbackReason: fallbackOccurred || feedback?.fallbackReason ? "provider-fallback" : undefined,
+                };
+                if (feedback?.source === "ai") {
+                    setWarningText(t.upload.warningInvalidAI);
+                }
+            }
+
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+                heartbeatInterval = null;
+            }
+
+            if (signal.aborted) return;
+
+            // Commit final entity under mutex lock to avoid write-write conflicts across tabs
+            const finalSavedEntity = await withTabLock("resumes-write-lock", async () => {
+                const saveRes = await saveResumeEntity(data);
+                if (!saveRes.success) {
+                    throw new Error(t.upload.errorSave || "Failed to persist completed analysis");
+                }
+                return saveRes.entity;
+            });
+
+            // Write metadata header to localStorage for fast list view
+            await kv.set(resumeKey, JSON.stringify(buildResumeHeader(finalSavedEntity)));
+
+            completed = true;
+            setStatusText(t.upload.statusComplete);
+            notifyResumesChanged({
+                type: "resumes-changed",
+                resumeId: uuid,
+                version: finalSavedEntity.version,
+                updatedAt: finalSavedEntity.updatedAt,
+            });
+            navigate(`/resume/${uuid}`);
+        } catch (err) {
+            if (abortRef.current !== controller) return;
+
+            if (err instanceof Error && err.name === "AbortError") {
+                setStatusText("");
+                setProgressStep(1);
+            } else {
+                console.error("Analysis failed:", err);
+                const message = err instanceof UnauthorizedError
+                    ? t.upload.errorUnauthorized
+                    : err instanceof ConsentRequiredError
+                    ? t.upload.errorConsent
+                    : err instanceof Error
+                        ? err.message
+                        : t.upload.errorAnalyze;
+                setErrorText(message);
+                setStatusText("");
+            }
+        } finally {
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            if (!completed) {
+                await cleanupBlobs(createdPaths);
+                if (resumeId) {
+                    await deleteResumeEntity(resumeId);
+                }
+                if (resumeKey) {
+                    await kv.delete(resumeKey);
+                }
+            }
+            if (abortRef.current === controller) {
+                setIsProcessing(false);
+            }
+        }
+    };
+
+    const modeText = (() => {
+        switch (providerMode) {
+            case "gemini": return t.upload.modeRemote.replace("{provider}", "Google Gemini");
+            case "groq": return t.upload.modeRemote.replace("{provider}", "Groq");
+            case "ollama": return t.upload.modeOllama;
+            case "offline": return t.upload.modeLocal;
+            default: return t.upload.modeUnknown;
+        }
+    })();
+    const modeIcon = providerMode === "offline" || providerMode === "ollama" ? "🔒" : providerMode === "unknown" ? "⚠️" : "🌐";
+
     return (
-        <main className="min-h-screen bg-cyber-grid flex flex-col transition-colors duration-300">
+        <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-200">
             <Navbar />
 
-            <div className="max-w-4xl mx-auto w-full px-4 sm:px-8 py-10 sm:py-16 space-y-8 flex-1">
+            <div className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12">
                 {/* Header */}
-                <div className="text-center space-y-3 max-w-2xl mx-auto">
+                <div className="text-center space-y-3 mb-8 sm:mb-12">
                     <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider">
                         <span>⚡</span>
                         <span>{t.upload.badge}</span>
                     </div>
-                    <h1 className="text-slate-900 dark:text-white">
+                    <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
                         {t.upload.heading}
                     </h1>
-                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                    <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-xl mx-auto">
                         {t.upload.subheading}
                     </p>
+
+                    {/* Active Provider Indicator */}
+                    {configLoaded && (
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-slate-200/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400">
+                            <span aria-hidden="true">{modeIcon}</span>
+                            <span>{modeText}</span>
+                        </div>
+                    )}
                 </div>
 
-                {/* Form or Processing View */}
+                {/* Progress / Form Card */}
                 {isProcessing ? (
-                    <div className="glass-card p-10 sm:p-16 text-center space-y-8 max-w-lg mx-auto animate-in fade-in duration-300">
-                        {/* Glowing Spinner */}
-                        <div className="relative w-24 h-24 mx-auto">
-                            <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin"></div>
-                            <div className="absolute inset-3 rounded-full border-4 border-cyan-500/20 border-t-cyan-400 animate-spin animate-reverse"></div>
-                            <div className="absolute inset-0 flex items-center justify-center text-xl">
-                                📄
-                            </div>
+                    <div className="glass-card p-8 sm:p-12 text-center space-y-6 max-w-lg mx-auto">
+                        <div className="relative w-16 h-16 mx-auto">
+                            <div className="w-16 h-16 rounded-full border-4 border-indigo-200 dark:border-indigo-900/50 border-t-indigo-600 dark:border-t-indigo-400 animate-spin" />
+                            <span className="absolute inset-0 flex items-center justify-center text-xl">
+                                {progressStep === 1 ? "📄" : progressStep === 2 ? "🖼️" : progressStep === 3 ? "⚙️" : "✨"}
+                            </span>
                         </div>
 
                         <div className="space-y-2">
-                            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                                {statusText}
-                            </h2>
+                            <h3 className="text-lg font-bold">{statusText}</h3>
                             <p className="text-xs text-slate-400">
                                 {t.upload.stepProgress.replace("{step}", String(progressStep))}
                             </p>
                         </div>
 
-                        {/* Progress Bar */}
                         <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
                             <div
-                                className="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-500 rounded-full"
-                                style={{ width: `${(progressStep / 5) * 100}%` }}
+                                className="bg-indigo-600 dark:bg-indigo-500 h-2 rounded-full transition-all duration-500"
+                                style={{ width: `${(progressStep / 4) * 100}%` }}
                             />
                         </div>
+
+                        <button
+                            type="button"
+                            onClick={handleCancel}
+                            className="secondary-button text-xs font-semibold py-2 px-5"
+                        >
+                            {t.upload.cancelButton}
+                        </button>
                     </div>
                 ) : (
                     <div className="glass-card p-6 sm:p-10 shadow-xl max-w-2xl mx-auto">
@@ -189,7 +466,11 @@ const Upload = () => {
                                 <label className="text-sm font-bold">
                                     <span>📄</span> {t.upload.uploadResumeLabel}
                                 </label>
-                                <FileUploader onFileSelect={handleFileSelect} />
+                                <FileUploader
+                                    key={fileKey}
+                                    file={file}
+                                    onFileSelect={handleFileSelect}
+                                />
                             </div>
 
                             {/* Job Title and Company Grid */}
@@ -202,6 +483,7 @@ const Upload = () => {
                                         type="text"
                                         name="job-title"
                                         id="job-title"
+                                        maxLength={120}
                                         placeholder={t.upload.jobTitlePlaceholder}
                                     />
                                 </div>
@@ -213,6 +495,7 @@ const Upload = () => {
                                         type="text"
                                         name="company-name"
                                         id="company-name"
+                                        maxLength={120}
                                         placeholder={t.upload.companyNamePlaceholder}
                                     />
                                 </div>
@@ -227,6 +510,7 @@ const Upload = () => {
                                     rows={5}
                                     name="job-description"
                                     id="job-description"
+                                    maxLength={10000}
                                     placeholder={t.upload.jobDescriptionPlaceholder}
                                 />
                                 <p className="text-[11px] text-slate-400 dark:text-slate-500">
@@ -234,12 +518,84 @@ const Upload = () => {
                                 </p>
                             </div>
 
+                            {/* API Token input when server requires auth */}
+                            {requiresAuth && (
+                                <div className="space-y-2 w-full p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/20">
+                                    <label htmlFor="api-key" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                        <span>🔑</span> {t.upload.apiKeyLabel}
+                                    </label>
+                                    <input
+                                        type="password"
+                                        name="api-key"
+                                        id="api-key"
+                                        value={apiKey}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setApiKey(val);
+                                            try {
+                                                if (typeof sessionStorage !== "undefined") {
+                                                    sessionStorage.setItem("cvision_api_key", val.trim());
+                                                }
+                                            } catch {
+                                                // Storage disabled
+                                            }
+                                        }}
+                                        placeholder={t.upload.apiKeyPlaceholder}
+                                        className="w-full text-xs font-mono py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Server unavailable note (informational fallback) */}
+                            {configLoaded && providerStatus === "server-unavailable" && (
+                                <div
+                                    role="status"
+                                    className="p-3 rounded-xl bg-slate-500/10 border border-slate-500/20 text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2"
+                                >
+                                    <span>🔒</span>
+                                    <span>{t.upload.modeServerUnavailable}</span>
+                                </div>
+                            )}
+
+                            {/* Privacy consent for remote providers */}
+                            {consentRequired && (
+                                <label className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={consentChecked}
+                                        onChange={(e) => setConsentChecked(e.target.checked)}
+                                        className="mt-0.5 h-4 w-4 accent-indigo-600"
+                                    />
+                                    <span>{t.upload.privacyConsent}</span>
+                                </label>
+                            )}
+
+                            {/* Warning banner (non-blocking) */}
+                            {warningText && (
+                                <div
+                                    role="status"
+                                    className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300"
+                                >
+                                    {warningText}
+                                </div>
+                            )}
+
+                            {/* Error banner */}
+                            {errorText && (
+                                <div
+                                    role="alert"
+                                    className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-sm text-rose-600 dark:text-rose-300"
+                                >
+                                    {errorText}
+                                </div>
+                            )}
+
                             {/* Submit Button */}
                             <div className="pt-2 w-full">
                                 <button
                                     type="submit"
-                                    disabled={!file}
-                                    className="primary-button w-full text-base py-3.5"
+                                    disabled={!canSubmit}
+                                    className="primary-button w-full text-base py-3.5 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <span>🚀</span>
                                     <span>{t.upload.analyzeButton}</span>
