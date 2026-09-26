@@ -28,7 +28,11 @@ export const notifyResumesChanged = (payload?: Partial<TabSyncMessage>): void =>
             resumeId: payload?.resumeId,
             version: payload?.version,
             updatedAt: payload?.updatedAt ?? Date.now(),
-            operationId: payload?.operationId ?? (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : undefined),
+            operationId:
+                payload?.operationId ??
+                (typeof crypto !== "undefined" && crypto.randomUUID
+                    ? crypto.randomUUID()
+                    : undefined),
             sourceTabId: TAB_ID,
         };
         channel.postMessage(message);
@@ -39,7 +43,7 @@ export const notifyResumesChanged = (payload?: Partial<TabSyncMessage>): void =>
 };
 
 export const subscribeResumesChanged = (
-    callback: (message: TabSyncMessage) => void
+    callback: (message: TabSyncMessage) => void,
 ): (() => void) => {
     try {
         const channel = new BroadcastChannel(CHANNEL);
@@ -58,7 +62,7 @@ export const subscribeResumesChanged = (
 // than the currently stored record.
 export const isStaleWrite = (
     incoming: { updatedAt?: number; version?: number },
-    current: { updatedAt?: number; version?: number }
+    current: { updatedAt?: number; version?: number },
 ): boolean => {
     if (typeof incoming.version === "number" && typeof current.version === "number") {
         if (incoming.version < current.version) return true;
@@ -69,13 +73,38 @@ export const isStaleWrite = (
     return false;
 };
 
+// In-process fallback: serializes callers on the same lock name with a promise
+// chain. Used when neither Web Locks nor localStorage exist (Node test env).
+const processLockChain = new Map<string, Promise<unknown>>();
+
+export const withProcessLock = async <T>(
+    lockName: string,
+    callback: () => Promise<T>,
+): Promise<T> => {
+    const previous = processLockChain.get(lockName) ?? Promise.resolve();
+    const run = previous.then(callback);
+    const tail = run.then(
+        () => undefined,
+        () => undefined,
+    );
+    processLockChain.set(lockName, tail);
+    void tail.then(() => {
+        if (processLockChain.get(lockName) === tail) processLockChain.delete(lockName);
+    });
+    return await run;
+};
+
 // Web Locks coordination using navigator.locks when available.
 export const withTabLock = async <T>(
     lockName: string,
     callback: () => Promise<T>,
-    timeoutMs = 10_000
+    timeoutMs = 10_000,
 ): Promise<T> => {
-    if (typeof navigator !== "undefined" && "locks" in navigator && typeof navigator.locks?.request === "function") {
+    if (
+        typeof navigator !== "undefined" &&
+        "locks" in navigator &&
+        typeof navigator.locks?.request === "function"
+    ) {
         return new Promise<T>((resolve, reject) => {
             const controller = new AbortController();
             const timer = setTimeout(() => {
@@ -151,7 +180,7 @@ export const withTabLock = async <T>(
             if (current?.ownerId === ownerId) {
                 localStorage.setItem(
                     lockKey,
-                    JSON.stringify({ ownerId, expiresAt: Date.now() + leaseDurationMs })
+                    JSON.stringify({ ownerId, expiresAt: Date.now() + leaseDurationMs }),
                 );
             } else {
                 clearInterval(heartbeatTimer);
@@ -169,5 +198,40 @@ export const withTabLock = async <T>(
         }
     }
 
-    return await callback();
+    // Neither Web Locks nor localStorage: serialize in-process.
+    return await withProcessLock(lockName, callback);
+};
+
+/**
+ * Removes `tab_lock_*` leases that are already expired. Expired leases are
+ * ignored by the acquisition loop, but they would otherwise accumulate in
+ * localStorage forever after a tab crashed mid-operation.
+ * Returns the number of leases removed.
+ */
+export const sweepTabLocks = (): number => {
+    if (typeof localStorage === "undefined") return 0;
+    let removed = 0;
+    try {
+        const now = Date.now();
+        const stale: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!key || !key.startsWith("tab_lock_")) continue;
+            let expiresAt = -1;
+            try {
+                const parsed = JSON.parse(localStorage.getItem(key) ?? "");
+                if (typeof parsed?.expiresAt === "number") expiresAt = parsed.expiresAt;
+            } catch {
+                // Unparseable lease: treat as abandoned.
+            }
+            if (expiresAt <= now) stale.push(key);
+        }
+        for (const key of stale) {
+            localStorage.removeItem(key);
+            removed++;
+        }
+    } catch {
+        // Storage unavailable — nothing to sweep.
+    }
+    return removed;
 };

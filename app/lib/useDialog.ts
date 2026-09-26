@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 
-const FOCUSABLE =
-    'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE = 'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])';
 
 // Minimal accessible-dialog behavior: Escape to close, a focus trap, initial
 // focus on the first focusable element, and restoration of the previously
@@ -10,12 +9,17 @@ export function useDialog(isOpen: boolean, onClose: () => void) {
     const dialogRef = useRef<HTMLDivElement>(null);
     const restoreRef = useRef<Element | null>(null);
     const onCloseRef = useRef(onClose);
-    onCloseRef.current = onClose;
+
+    // Keep the latest handler without re-subscribing the dialog effect.
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
 
     useEffect(() => {
         if (!isOpen) return;
 
-        const originalOverflow = typeof document !== "undefined" ? document.body.style.overflow : "";
+        const originalOverflow =
+            typeof document !== "undefined" ? document.body.style.overflow : "";
         if (typeof document !== "undefined") {
             document.body.style.overflow = "hidden";
         }
@@ -26,7 +30,7 @@ export function useDialog(isOpen: boolean, onClose: () => void) {
         const getFocusable = (): HTMLElement[] =>
             dialog
                 ? Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-                      (el) => !el.hasAttribute("disabled")
+                      (el) => !el.hasAttribute("disabled"),
                   )
                 : [];
 

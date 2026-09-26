@@ -18,15 +18,18 @@ import { prepareInstructions } from "../../constants";
 import { useI18nStore } from "~/lib/i18n";
 import { parseFeedbackText } from "~/lib/ai/schema";
 import { fetchProviderConfig, ConsentRequiredError, UnauthorizedError } from "~/lib/ai/providers";
-import { RESUME_SCHEMA_VERSION } from "~/lib/migrations";
+import { RESUME_SCHEMA_VERSION, EMPTY_FEEDBACK } from "~/lib/migrations";
 import { notifyResumesChanged, withTabLock } from "~/lib/tabsync";
 import type { Resume } from "~/domain/resume";
 import { buildResumeHeader } from "~/domain/resume";
-import type { Feedback } from "~/domain/feedback";
 
 export const meta = () => [
     { title: "CVision AI | Upload & Analyze Resume" },
-    { name: "description", content: "Upload your resume and job requirements for an instant ATS diagnosis and keyword match audit." },
+    {
+        name: "description",
+        content:
+            "Upload your resume and job requirements for an instant ATS diagnosis and keyword match audit.",
+    },
 ];
 
 const Upload = () => {
@@ -55,8 +58,12 @@ const Upload = () => {
         return "";
     });
     const [configLoaded, setConfigLoaded] = useState(false);
-    const [providerMode, setProviderMode] = useState<"offline" | "gemini" | "groq" | "ollama" | "unknown">("offline");
-    const [providerStatus, setProviderStatus] = useState<"ready" | "offline" | "server-unavailable">("offline");
+    const [providerMode, setProviderMode] = useState<
+        "offline" | "gemini" | "groq" | "ollama" | "unknown"
+    >("offline");
+    const [providerStatus, setProviderStatus] = useState<
+        "ready" | "offline" | "server-unavailable"
+    >("offline");
 
     const abortRef = useRef<AbortController | null>(null);
 
@@ -108,7 +115,8 @@ const Upload = () => {
         setErrorText("");
     };
 
-    const canSubmit = !!file && !isProcessing && configLoaded && (!consentRequired || consentChecked);
+    const canSubmit =
+        !!file && !isProcessing && configLoaded && (!consentRequired || consentChecked);
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -177,7 +185,7 @@ const Upload = () => {
                 processingStartedAt: Date.now(),
                 heartbeatAt: Date.now(),
                 updatedAt: Date.now(),
-                feedback: {} as Feedback,
+                feedback: { ...EMPTY_FEEDBACK },
             };
 
             const initialRes = await saveResumeEntity(initialEntity);
@@ -186,14 +194,16 @@ const Upload = () => {
             }
             heartbeatInterval = setInterval(async () => {
                 try {
-                    const current = await getResumeEntity(uuid);
-                    if (current && current.status === "processing") {
-                        await saveResumeEntity({
-                            ...current,
-                            heartbeatAt: Date.now(),
-                            updatedAt: Date.now(),
-                        });
-                    }
+                    await withTabLock(`resume-write-${uuid}`, async () => {
+                        const current = await getResumeEntity(uuid);
+                        if (current && current.status === "processing") {
+                            await saveResumeEntity({
+                                ...current,
+                                heartbeatAt: Date.now(),
+                                updatedAt: Date.now(),
+                            });
+                        }
+                    });
                 } catch {
                     // Ignore transient heartbeat save errors
                 }
@@ -204,10 +214,13 @@ const Upload = () => {
             setStatusText(t.upload.statusConverting);
             setProgressStep(2);
 
-            const { text: resumeText, image: imageFile, noText, hasMultipleColumns, error: pdfError } = await processPdf(
-                file,
-                signal
-            );
+            const {
+                text: resumeText,
+                image: imageFile,
+                noText,
+                hasMultipleColumns,
+                error: pdfError,
+            } = await processPdf(file, signal);
             if (signal.aborted) return;
             if (pdfError) {
                 throw new Error(t.upload.errorConvertPdf);
@@ -236,9 +249,7 @@ const Upload = () => {
             setStatusText(t.upload.statusPreparing);
             setProgressStep(3);
 
-            const prompt = prepareInstructions(
-                { resumeText, jobTitle, jobDescription, language }
-            );
+            const prompt = prepareInstructions({ resumeText, jobTitle, jobDescription, language });
 
             setStatusText(t.upload.statusAnalyzing);
             setProgressStep(4);
@@ -249,12 +260,15 @@ const Upload = () => {
             if (providerStatus === "server-unavailable" || providerMode === "offline") {
                 const fallbackAnalysis = generateResumeFeedback(
                     { rawText: resumeText, jobTitle, jobDescription },
-                    language
+                    language,
                 );
                 feedback = {
                     message: { content: JSON.stringify(fallbackAnalysis) },
                     source: "heuristic" as const,
-                    fallbackReason: providerStatus === "server-unavailable" ? "offline-mode" as const : undefined,
+                    fallbackReason:
+                        providerStatus === "server-unavailable"
+                            ? ("offline-mode" as const)
+                            : undefined,
                 };
             } else {
                 try {
@@ -264,7 +278,8 @@ const Upload = () => {
                     }
                 } catch (aiErr) {
                     if (signal.aborted) throw aiErr;
-                    if (aiErr instanceof ConsentRequiredError || aiErr instanceof UnauthorizedError) throw aiErr;
+                    if (aiErr instanceof ConsentRequiredError || aiErr instanceof UnauthorizedError)
+                        throw aiErr;
                     console.warn("ai.feedback failed, falling back to local:", aiErr);
                     fallbackOccurred = true;
                 }
@@ -273,9 +288,7 @@ const Upload = () => {
             if (signal.aborted) return;
 
             const feedbackText =
-                typeof feedback?.message?.content === "string"
-                    ? feedback.message.content
-                    : "";
+                typeof feedback?.message?.content === "string" ? feedback.message.content : "";
 
             const data: Resume = {
                 id: uuid,
@@ -290,7 +303,7 @@ const Upload = () => {
                 rawText: resumeText,
                 status: "completed",
                 version: 1,
-                feedback: {} as Feedback,
+                feedback: { ...EMPTY_FEEDBACK },
             };
 
             const parsed = parseFeedbackText(feedbackText);
@@ -316,9 +329,12 @@ const Upload = () => {
                 data.feedback = {
                     ...generateResumeFeedback(
                         { rawText: resumeText, jobTitle, jobDescription },
-                        language
+                        language,
                     ),
-                    fallbackReason: fallbackOccurred || feedback?.fallbackReason ? "provider-fallback" : undefined,
+                    fallbackReason:
+                        fallbackOccurred || feedback?.fallbackReason
+                            ? "provider-fallback"
+                            : undefined,
                 };
                 if (feedback?.source === "ai") {
                     setWarningText(t.upload.warningInvalidAI);
@@ -332,17 +348,39 @@ const Upload = () => {
 
             if (signal.aborted) return;
 
-            // Commit final entity under mutex lock to avoid write-write conflicts across tabs
-            const finalSavedEntity = await withTabLock("resumes-write-lock", async () => {
-                const saveRes = await saveResumeEntity(data);
+            // Commit entity + list header under a per-resume mutex so no other
+            // tab can interleave between the two writes.
+            const finalKey = resumeKey;
+            if (!finalKey) {
+                throw new Error(t.upload.errorSave || "Failed to persist completed analysis");
+            }
+            const finalSavedEntity = await withTabLock(`resume-write-${uuid}`, async () => {
+                const commit = async () => {
+                    const current = await getResumeEntity(uuid);
+                    // Adopt the freshest version/updatedAt as the optimistic
+                    // baseline so heartbeat writes never look like stale writes.
+                    const baseline = current
+                        ? {
+                              ...data,
+                              version: current.version,
+                              updatedAt: Math.max(data.updatedAt ?? 0, current.updatedAt ?? 0),
+                          }
+                        : data;
+                    return await saveResumeEntity(baseline, current?.version);
+                };
+
+                let saveRes = await commit();
+                // Only reachable when a writer bypassed the mutex; retry once
+                // against the version it observed.
+                if (!saveRes.success && saveRes.reason === "version_mismatch") {
+                    saveRes = await commit();
+                }
                 if (!saveRes.success) {
                     throw new Error(t.upload.errorSave || "Failed to persist completed analysis");
                 }
+                await kv.set(finalKey, JSON.stringify(buildResumeHeader(saveRes.entity)));
                 return saveRes.entity;
             });
-
-            // Write metadata header to localStorage for fast list view
-            await kv.set(resumeKey, JSON.stringify(buildResumeHeader(finalSavedEntity)));
 
             completed = true;
             setStatusText(t.upload.statusComplete);
@@ -361,13 +399,14 @@ const Upload = () => {
                 setProgressStep(1);
             } else {
                 console.error("Analysis failed:", err);
-                const message = err instanceof UnauthorizedError
-                    ? t.upload.errorUnauthorized
-                    : err instanceof ConsentRequiredError
-                    ? t.upload.errorConsent
-                    : err instanceof Error
-                        ? err.message
-                        : t.upload.errorAnalyze;
+                const message =
+                    err instanceof UnauthorizedError
+                        ? t.upload.errorUnauthorized
+                        : err instanceof ConsentRequiredError
+                          ? t.upload.errorConsent
+                          : err instanceof Error
+                            ? err.message
+                            : t.upload.errorAnalyze;
                 setErrorText(message);
                 setStatusText("");
             }
@@ -390,14 +429,24 @@ const Upload = () => {
 
     const modeText = (() => {
         switch (providerMode) {
-            case "gemini": return t.upload.modeRemote.replace("{provider}", "Google Gemini");
-            case "groq": return t.upload.modeRemote.replace("{provider}", "Groq");
-            case "ollama": return t.upload.modeOllama;
-            case "offline": return t.upload.modeLocal;
-            default: return t.upload.modeUnknown;
+            case "gemini":
+                return t.upload.modeRemote.replace("{provider}", "Google Gemini");
+            case "groq":
+                return t.upload.modeRemote.replace("{provider}", "Groq");
+            case "ollama":
+                return t.upload.modeOllama;
+            case "offline":
+                return t.upload.modeLocal;
+            default:
+                return t.upload.modeUnknown;
         }
     })();
-    const modeIcon = providerMode === "offline" || providerMode === "ollama" ? "🔒" : providerMode === "unknown" ? "⚠️" : "🌐";
+    const modeIcon =
+        providerMode === "offline" || providerMode === "ollama"
+            ? "🔒"
+            : providerMode === "unknown"
+              ? "⚠️"
+              : "🌐";
 
     return (
         <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-200">
@@ -432,7 +481,13 @@ const Upload = () => {
                         <div className="relative w-16 h-16 mx-auto">
                             <div className="w-16 h-16 rounded-full border-4 border-indigo-200 dark:border-indigo-900/50 border-t-indigo-600 dark:border-t-indigo-400 animate-spin" />
                             <span className="absolute inset-0 flex items-center justify-center text-xl">
-                                {progressStep === 1 ? "📄" : progressStep === 2 ? "🖼️" : progressStep === 3 ? "⚙️" : "✨"}
+                                {progressStep === 1
+                                    ? "📄"
+                                    : progressStep === 2
+                                      ? "🖼️"
+                                      : progressStep === 3
+                                        ? "⚙️"
+                                        : "✨"}
                             </span>
                         </div>
 
@@ -521,7 +576,10 @@ const Upload = () => {
                             {/* API Token input when server requires auth */}
                             {requiresAuth && (
                                 <div className="space-y-2 w-full p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/20">
-                                    <label htmlFor="api-key" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                    <label
+                                        htmlFor="api-key"
+                                        className="text-xs font-bold text-slate-700 dark:text-slate-300"
+                                    >
                                         <span>🔑</span> {t.upload.apiKeyLabel}
                                     </label>
                                     <input
@@ -534,7 +592,10 @@ const Upload = () => {
                                             setApiKey(val);
                                             try {
                                                 if (typeof sessionStorage !== "undefined") {
-                                                    sessionStorage.setItem("cvision_api_key", val.trim());
+                                                    sessionStorage.setItem(
+                                                        "cvision_api_key",
+                                                        val.trim(),
+                                                    );
                                                 }
                                             } catch {
                                                 // Storage disabled

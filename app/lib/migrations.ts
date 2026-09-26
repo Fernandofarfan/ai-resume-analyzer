@@ -15,7 +15,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const toStr = (value: unknown): string | undefined =>
     typeof value === "string" ? value : undefined;
 
-const EMPTY_FEEDBACK: Feedback = {
+export const EMPTY_FEEDBACK: Feedback = {
     overallScore: 0,
     source: "heuristic",
     ATS: { score: 0, tips: [] },
@@ -40,7 +40,11 @@ const normalizeFeedback = (value: unknown): Feedback => {
             // the report is regenerated deterministically for the active language.
             normalized.source = "heuristic";
         }
-        if (value.confidence === "low" || value.confidence === "medium" || value.confidence === "high") {
+        if (
+            value.confidence === "low" ||
+            value.confidence === "medium" ||
+            value.confidence === "high"
+        ) {
             normalized.confidence = value.confidence as Confidence;
         }
     }
@@ -64,9 +68,7 @@ export const migrateResume = (raw: unknown): Resume | null => {
 
     const analyzedAt = typeof raw.analyzedAt === "number" ? raw.analyzedAt : undefined;
     const updatedAt =
-        typeof raw.updatedAt === "number"
-            ? raw.updatedAt
-            : analyzedAt ?? Date.now();
+        typeof raw.updatedAt === "number" ? raw.updatedAt : (analyzedAt ?? Date.now());
 
     const version = typeof raw.version === "number" ? raw.version : 1;
 
@@ -82,12 +84,17 @@ export const migrateResume = (raw: unknown): Resume | null => {
                 ? raw.status
                 : undefined,
         attachmentsStatus:
-            raw.attachmentsStatus === "complete" || raw.attachmentsStatus === "partial" || raw.attachmentsStatus === "missing" || raw.attachmentsStatus === "unavailable"
+            raw.attachmentsStatus === "complete" ||
+            raw.attachmentsStatus === "partial" ||
+            raw.attachmentsStatus === "missing" ||
+            raw.attachmentsStatus === "unavailable"
                 ? raw.attachmentsStatus
                 : computeAttachmentsStatus(Boolean(raw.resumePath), Boolean(raw.imagePath)),
-        processingStartedAt: typeof raw.processingStartedAt === "number" ? raw.processingStartedAt : undefined,
+        processingStartedAt:
+            typeof raw.processingStartedAt === "number" ? raw.processingStartedAt : undefined,
         heartbeatAt: typeof raw.heartbeatAt === "number" ? raw.heartbeatAt : undefined,
-        processingOwnerId: typeof raw.processingOwnerId === "string" ? raw.processingOwnerId : undefined,
+        processingOwnerId:
+            typeof raw.processingOwnerId === "string" ? raw.processingOwnerId : undefined,
         resumePath: raw.resumePath,
         imagePath: raw.imagePath,
         companyName: toStr(raw.companyName),
@@ -116,9 +123,7 @@ export const migrateResumeHeader = (raw: unknown): ResumeHeader | null => {
 
     const analyzedAt = typeof raw.analyzedAt === "number" ? raw.analyzedAt : undefined;
     const updatedAt =
-        typeof raw.updatedAt === "number"
-            ? raw.updatedAt
-            : analyzedAt ?? Date.now();
+        typeof raw.updatedAt === "number" ? raw.updatedAt : (analyzedAt ?? Date.now());
     const version = typeof raw.version === "number" ? raw.version : 1;
 
     return {
@@ -132,12 +137,17 @@ export const migrateResumeHeader = (raw: unknown): ResumeHeader | null => {
                 ? raw.status
                 : undefined,
         attachmentsStatus:
-            raw.attachmentsStatus === "complete" || raw.attachmentsStatus === "partial" || raw.attachmentsStatus === "missing" || raw.attachmentsStatus === "unavailable"
+            raw.attachmentsStatus === "complete" ||
+            raw.attachmentsStatus === "partial" ||
+            raw.attachmentsStatus === "missing" ||
+            raw.attachmentsStatus === "unavailable"
                 ? raw.attachmentsStatus
                 : computeAttachmentsStatus(Boolean(raw.resumePath), Boolean(raw.imagePath)),
-        processingStartedAt: typeof raw.processingStartedAt === "number" ? raw.processingStartedAt : undefined,
+        processingStartedAt:
+            typeof raw.processingStartedAt === "number" ? raw.processingStartedAt : undefined,
         heartbeatAt: typeof raw.heartbeatAt === "number" ? raw.heartbeatAt : undefined,
-        processingOwnerId: typeof raw.processingOwnerId === "string" ? raw.processingOwnerId : undefined,
+        processingOwnerId:
+            typeof raw.processingOwnerId === "string" ? raw.processingOwnerId : undefined,
         companyName: toStr(raw.companyName),
         jobTitle: toStr(raw.jobTitle),
         overallScore: typeof raw.overallScore === "number" ? raw.overallScore : undefined,
@@ -148,13 +158,21 @@ export const migrateResumeHeader = (raw: unknown): ResumeHeader | null => {
         source: raw.source === "ai" || raw.source === "heuristic" ? raw.source : undefined,
         resumePath: raw.resumePath,
         imagePath: raw.imagePath,
-        matchingKeywords: Array.isArray(raw.matchingKeywords) ? raw.matchingKeywords.map(String) : undefined,
-        missingKeywords: Array.isArray(raw.missingKeywords) ? raw.missingKeywords.map(String) : undefined,
-        searchSnippet: toStr(raw.searchSnippet) || [
-            toStr(raw.companyName) || "",
-            toStr(raw.jobTitle) || "",
-            ...(Array.isArray(raw.matchingKeywords) ? raw.matchingKeywords : []),
-            ...(Array.isArray(raw.missingKeywords) ? raw.missingKeywords : []),
-        ].join(" ").toLowerCase(),
+        matchingKeywords: Array.isArray(raw.matchingKeywords)
+            ? raw.matchingKeywords.map(String)
+            : undefined,
+        missingKeywords: Array.isArray(raw.missingKeywords)
+            ? raw.missingKeywords.map(String)
+            : undefined,
+        searchSnippet:
+            toStr(raw.searchSnippet) ||
+            [
+                toStr(raw.companyName) || "",
+                toStr(raw.jobTitle) || "",
+                ...(Array.isArray(raw.matchingKeywords) ? raw.matchingKeywords : []),
+                ...(Array.isArray(raw.missingKeywords) ? raw.missingKeywords : []),
+            ]
+                .join(" ")
+                .toLowerCase(),
     };
 };

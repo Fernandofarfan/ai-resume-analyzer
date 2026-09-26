@@ -33,11 +33,17 @@ describe("validateFeedback", () => {
 
     it("rejects a category with a missing or non-numeric score", () => {
         expect(validateFeedback({ ...validPayload, toneAndStyle: { tips: [] } })).toBeNull();
-        expect(validateFeedback({ ...validPayload, content: { score: "high", tips: [] } })).toBeNull();
+        expect(
+            validateFeedback({ ...validPayload, content: { score: "high", tips: [] } }),
+        ).toBeNull();
     });
 
     it("clamps scores to the 0..100 range", () => {
-        const fb = validateFeedback({ ...validPayload, overallScore: 250, ATS: { score: -5, tips: [] } });
+        const fb = validateFeedback({
+            ...validPayload,
+            overallScore: 250,
+            ATS: { score: -5, tips: [] },
+        });
         expect(fb?.overallScore).toBe(100);
         expect(fb?.ATS.score).toBe(0);
     });

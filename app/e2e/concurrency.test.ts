@@ -1,17 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import "fake-indexeddb/auto";
-import {
-    saveResumeEntity,
-    getResumeEntity,
-    runStorageGarbageCollector,
-} from "~/lib/store";
-import {
-    saveLocalBlob,
-    getLocalBlob,
-    deleteLocalBlob,
-} from "~/lib/storage/indexeddb";
+import { saveResumeEntity, getResumeEntity, runStorageGarbageCollector } from "~/lib/store";
+import { saveLocalBlob, getLocalBlob, deleteLocalBlob } from "~/lib/storage/indexeddb";
 import { isStaleWrite, withTabLock, getTabId } from "~/lib/tabsync";
-import { RESUME_SCHEMA_VERSION } from "~/lib/migrations";
+import { EMPTY_FEEDBACK, RESUME_SCHEMA_VERSION } from "~/lib/migrations";
 
 describe("Concurrency, Mutex Locks & State Resilience", () => {
     beforeEach(() => {
@@ -75,7 +67,7 @@ describe("Concurrency, Mutex Locks & State Resilience", () => {
             rawText: "Sample resume text",
             status: "completed" as const,
             updatedAt: Date.now(),
-            feedback: { overallScore: 80 } as any,
+            feedback: { ...EMPTY_FEEDBACK, overallScore: 80 },
         };
 
         const res1 = await saveResumeEntity(initial);
@@ -83,20 +75,26 @@ describe("Concurrency, Mutex Locks & State Resilience", () => {
         expect(res1.entity.version).toBe(1);
 
         // Tab A attempts to save with expectedVersion = 1 -> succeeds, version becomes 2
-        const res2 = await saveResumeEntity({
-            ...res1.entity,
-            jobTitle: "Senior Software Engineer",
-            updatedAt: Date.now() + 10,
-        }, 1);
+        const res2 = await saveResumeEntity(
+            {
+                ...res1.entity,
+                jobTitle: "Senior Software Engineer",
+                updatedAt: Date.now() + 10,
+            },
+            1,
+        );
         expect(res2.success).toBe(true);
         expect(res2.entity.version).toBe(2);
 
         // Tab B attempts to save with stale expectedVersion = 1 -> rejected with version_mismatch
-        const resStale = await saveResumeEntity({
-            ...res1.entity,
-            jobTitle: "Staff Software Engineer",
-            updatedAt: Date.now() + 20,
-        }, 1);
+        const resStale = await saveResumeEntity(
+            {
+                ...res1.entity,
+                jobTitle: "Staff Software Engineer",
+                updatedAt: Date.now() + 20,
+            },
+            1,
+        );
         expect(resStale.success).toBe(false);
         expect(resStale.reason).toBe("version_mismatch");
         expect(resStale.entity.version).toBe(2);
@@ -107,7 +105,7 @@ describe("Concurrency, Mutex Locks & State Resilience", () => {
         const activeId = "active-processing-task";
         const now = Date.now();
         const staleTimestamp = now - 45 * 60 * 1000; // 45 min ago
-        const freshTimestamp = now - 2 * 60 * 1000;  // 2 min ago (heartbeat active)
+        const freshTimestamp = now - 2 * 60 * 1000; // 2 min ago (heartbeat active)
 
         await saveResumeEntity({
             id: staleId,
@@ -122,7 +120,7 @@ describe("Concurrency, Mutex Locks & State Resilience", () => {
             processingStartedAt: staleTimestamp,
             heartbeatAt: staleTimestamp,
             updatedAt: staleTimestamp,
-            feedback: {} as any,
+            feedback: EMPTY_FEEDBACK,
         });
 
         await saveResumeEntity({
@@ -138,7 +136,7 @@ describe("Concurrency, Mutex Locks & State Resilience", () => {
             processingStartedAt: staleTimestamp,
             heartbeatAt: freshTimestamp,
             updatedAt: freshTimestamp,
-            feedback: {} as any,
+            feedback: EMPTY_FEEDBACK,
         });
 
         const gcResult = await runStorageGarbageCollector(30 * 60 * 1000);

@@ -37,7 +37,9 @@ interface PdfTextItem {
 
 interface PdfJsPage {
     getViewport: (opts: { scale: number }) => { width: number; height: number };
-    render: (opts: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> };
+    render: (opts: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => {
+        promise: Promise<void>;
+    };
     getTextContent: () => Promise<{ items: PdfTextItem[] }>;
 }
 
@@ -81,7 +83,9 @@ const openPdfDocument = async (file: File, signal?: AbortSignal): Promise<PdfJsD
     assertNotAborted(signal);
 
     if (file.size > MAX_PDF_BYTES) {
-        throw new Error(`PDF exceeds the maximum size of ${Math.round(MAX_PDF_BYTES / 1024 / 1024)} MB`);
+        throw new Error(
+            `PDF exceeds the maximum size of ${Math.round(MAX_PDF_BYTES / 1024 / 1024)} MB`,
+        );
     }
 
     const lib = await loadPdfJs();
@@ -101,9 +105,9 @@ const openPdfDocument = async (file: File, signal?: AbortSignal): Promise<PdfJsD
         pdf = await lib.getDocument({ data: arrayBuffer }).promise;
     } catch (err) {
         if ((err as { name?: string } | null)?.name === "PasswordException") {
-            throw new Error("PDF is password-protected");
+            throw new Error("PDF is password-protected", { cause: err });
         }
-        throw new Error("Failed to parse PDF (corrupted or unsupported)");
+        throw new Error("Failed to parse PDF (corrupted or unsupported)", { cause: err });
     }
 
     if (pdf.numPages > MAX_PAGES) {
@@ -117,7 +121,7 @@ const openPdfDocument = async (file: File, signal?: AbortSignal): Promise<PdfJsD
 const renderFirstPage = async (
     pdf: PdfJsDocument,
     originalName: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
 ): Promise<File | null> => {
     assertNotAborted(signal);
     const page = await pdf.getPage(1);
@@ -131,8 +135,8 @@ const renderFirstPage = async (
         0.05,
         Math.min(
             BASE_SCALE,
-            MAX_CANVAS_DIMENSION / Math.max(baseViewport.width, baseViewport.height)
-        )
+            MAX_CANVAS_DIMENSION / Math.max(baseViewport.width, baseViewport.height),
+        ),
     );
     const viewport = page.getViewport({ scale });
 
@@ -155,13 +159,16 @@ const renderFirstPage = async (
             (blob) => {
                 if (blob) {
                     const cleanName = originalName.replace(/\.pdf$/i, "");
-                    resolve(new File([blob], `${cleanName}.png`, { type: "image/png" }));
+                    resolve(new File([blob], `${cleanName}.jpg`, { type: "image/jpeg" }));
                 } else {
                     resolve(null);
                 }
             },
-            "image/png",
-            1.0
+            // JPEG encodes an order of magnitude faster than PNG at this
+            // resolution and keeps the stored preview within quota; the page is
+            // a rendered photo of a document, so lossy compression is invisible.
+            "image/jpeg",
+            0.9,
         );
     });
 };
@@ -232,7 +239,7 @@ export const detectColumns = (items: PdfTextItem[]): boolean => {
 
 const extractText = async (
     pdf: PdfJsDocument,
-    signal?: AbortSignal
+    signal?: AbortSignal,
 ): Promise<{
     text: string;
     hasMultipleColumns: boolean;
@@ -287,7 +294,10 @@ export const processPdf = async (file: File, signal?: AbortSignal): Promise<PdfP
     try {
         pdf = await openPdfDocument(file, signal);
         const image = await renderFirstPage(pdf, file.name, signal);
-        const { text, hasMultipleColumns, pageCount, scannedPagesCount, pages } = await extractText(pdf, signal);
+        const { text, hasMultipleColumns, pageCount, scannedPagesCount, pages } = await extractText(
+            pdf,
+            signal,
+        );
         const noText = text.trim().length < MIN_TEXT_CHARS;
         const extractionQuality: "high" | "medium" | "low" =
             noText || scannedPagesCount > 0 ? "low" : text.length > 300 ? "high" : "medium";

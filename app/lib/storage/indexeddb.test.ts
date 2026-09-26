@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
 import {
     blobToBase64,
     base64ToBlob,
@@ -27,6 +27,7 @@ import {
 } from "./indexeddb";
 import { buildResumeHeader } from "../../domain/resume";
 import type { Resume } from "../../domain/resume";
+import { kvList, kvSet } from "./kv";
 
 const SAMPLE_PDF_BASE64 =
     "data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp/Og0MTGCjQgMCBvYmoKPDwgL0xlbmd0aCA1IDAgUiA+PgpzdHJlYW0KQlQgL0YxIDEyIFRmIDcyIDcxMiBUZCAoVGVzdCBSZXN1bWUpIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoK";
@@ -35,13 +36,43 @@ const SAMPLE_PNG_BASE64 =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErmCC";
 
 describe("IndexedDB Storage & Backup Integration Tests", () => {
+    // The suite runs in Node, where localStorage does not exist; kv.ts probes it
+    // lazily, so installing an in-memory shim here exercises the real index path.
+    const holder = globalThis as { localStorage?: unknown };
+    let originalLocalStorage: unknown;
+    let hadLocalStorage = false;
+
+    beforeAll(() => {
+        const data = new Map<string, string>();
+        const shim = {
+            get length() {
+                return data.size;
+            },
+            key: (i: number) => Array.from(data.keys())[i] ?? null,
+            getItem: (k: string) => data.get(k) ?? null,
+            setItem: (k: string, v: string) => void data.set(k, String(v)),
+            removeItem: (k: string) => void data.delete(k),
+            clear: () => data.clear(),
+        };
+        hadLocalStorage = "localStorage" in holder;
+        originalLocalStorage = holder.localStorage;
+        holder.localStorage = shim;
+    });
+
+    afterAll(() => {
+        if (hadLocalStorage) holder.localStorage = originalLocalStorage;
+        else delete holder.localStorage;
+    });
+
     beforeEach(async () => {
         await clearAllResumeEntities();
         await clearAllBlobs();
+        if (typeof localStorage !== "undefined") localStorage.clear();
     });
 
     it("converts blob to base64 and restores it losslessly", async () => {
-        const originalContent = "CVision AI test document buffer with special characters: áéíóú 12345";
+        const originalContent =
+            "CVision AI test document buffer with special characters: áéíóú 12345";
         const originalBlob = new Blob([originalContent], { type: "application/pdf" });
 
         const base64 = await blobToBase64(originalBlob);
@@ -68,7 +99,8 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
             jobDescription: "Lead distributed Kubernetes cluster architecture",
             resumePath: "local://resume.pdf",
             imagePath: "local://preview.png",
-            rawText: "Experienced in Docker, Terraform, Go, and high availability distributed systems.",
+            rawText:
+                "Experienced in Docker, Terraform, Go, and high availability distributed systems.",
             feedback: {
                 overallScore: 92,
                 source: "ai",
@@ -141,7 +173,15 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
             imagePath: "local://files/preview.png",
             companyName: "Meta",
             jobTitle: "Production Engineer",
-            feedback: { overallScore: 85, source: "ai", ATS: { score: 85, tips: [] }, toneAndStyle: { score: 80, tips: [] }, content: { score: 85, tips: [] }, structure: { score: 90, tips: [] }, skills: { score: 85, tips: [] } },
+            feedback: {
+                overallScore: 85,
+                source: "ai",
+                ATS: { score: 85, tips: [] },
+                toneAndStyle: { score: 80, tips: [] },
+                content: { score: 85, tips: [] },
+                structure: { score: 90, tips: [] },
+                skills: { score: 85, tips: [] },
+            },
         };
 
         expect(await hasResumeEntity("res-crud-1")).toBe(false);
@@ -182,7 +222,15 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
             companyName: "Apple",
             jobTitle: "Swift Engineer",
             rawText: "Swift, SwiftUI, Combine developer",
-            feedback: { overallScore: 90, source: "ai", ATS: { score: 90, tips: [] }, toneAndStyle: { score: 90, tips: [] }, content: { score: 90, tips: [] }, structure: { score: 90, tips: [] }, skills: { score: 90, tips: [] } },
+            feedback: {
+                overallScore: 90,
+                source: "ai",
+                ATS: { score: 90, tips: [] },
+                toneAndStyle: { score: 90, tips: [] },
+                content: { score: 90, tips: [] },
+                structure: { score: 90, tips: [] },
+                skills: { score: 90, tips: [] },
+            },
         };
         await saveResumeEntity(resume);
 
@@ -237,7 +285,15 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
             imagePath: existingPngPath,
             companyName: "Original Corp",
             jobTitle: "Senior Architect",
-            feedback: { overallScore: 80, source: "heuristic", ATS: { score: 80, tips: [] }, toneAndStyle: { score: 80, tips: [] }, content: { score: 80, tips: [] }, structure: { score: 80, tips: [] }, skills: { score: 80, tips: [] } },
+            feedback: {
+                overallScore: 80,
+                source: "heuristic",
+                ATS: { score: 80, tips: [] },
+                toneAndStyle: { score: 80, tips: [] },
+                content: { score: 80, tips: [] },
+                structure: { score: 80, tips: [] },
+                skills: { score: 80, tips: [] },
+            },
         };
         await saveResumeEntity(existingResume);
 
@@ -287,7 +343,15 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
             imagePath: "",
             companyName: "Active Co",
             jobTitle: "Active Role",
-            feedback: { overallScore: 90, source: "ai", ATS: { score: 90, tips: [] }, toneAndStyle: { score: 90, tips: [] }, content: { score: 90, tips: [] }, structure: { score: 90, tips: [] }, skills: { score: 90, tips: [] } },
+            feedback: {
+                overallScore: 90,
+                source: "ai",
+                ATS: { score: 90, tips: [] },
+                toneAndStyle: { score: 90, tips: [] },
+                content: { score: 90, tips: [] },
+                structure: { score: 90, tips: [] },
+                skills: { score: 90, tips: [] },
+            },
         };
         await saveResumeEntity(activeResume);
 
@@ -302,7 +366,15 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
             imagePath: "",
             companyName: "Stale Co",
             jobTitle: "Role",
-            feedback: { overallScore: 0, source: "heuristic", ATS: { score: 0, tips: [] }, toneAndStyle: { score: 0, tips: [] }, content: { score: 0, tips: [] }, structure: { score: 0, tips: [] }, skills: { score: 0, tips: [] } },
+            feedback: {
+                overallScore: 0,
+                source: "heuristic",
+                ATS: { score: 0, tips: [] },
+                toneAndStyle: { score: 0, tips: [] },
+                content: { score: 0, tips: [] },
+                structure: { score: 0, tips: [] },
+                skills: { score: 0, tips: [] },
+            },
         };
         await saveResumeEntity(staleResume);
 
@@ -318,6 +390,41 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
         expect(await hasLocalBlob(orphanPath)).toBe(false);
         expect(await hasLocalBlob(staleProcessingPath)).toBe(false);
         expect(await hasResumeEntity("stale-processing-resume")).toBe(false);
+    });
+
+    it("garbage collector reconciles index headers with the entity store", async () => {
+        // A header whose entity disappeared (crashed delete) is a ghost entry.
+        await kvSet(
+            "resume:ghost-entity",
+            JSON.stringify({ id: "ghost-entity", companyName: "Ghost" }),
+        );
+
+        // An entity without a header is invisible in the list (header write failed).
+        await saveResumeEntity({
+            id: "missing-header",
+            schemaVersion: 2,
+            version: 3,
+            resumePath: "",
+            imagePath: "",
+            companyName: "Hidden Co",
+            jobTitle: "Hidden Role",
+            feedback: {
+                overallScore: 70,
+                source: "heuristic",
+                ATS: { score: 70, tips: [] },
+                toneAndStyle: { score: 70, tips: [] },
+                content: { score: 70, tips: [] },
+                structure: { score: 70, tips: [] },
+                skills: { score: 70, tips: [] },
+            },
+        });
+
+        const gcRes = await runStorageGarbageCollector(0);
+        expect(gcRes.deletedOrphanHeaders).toBe(1);
+        expect(gcRes.repairedHeaders).toBe(1);
+
+        expect(await kvList("resume:*")).toEqual(["resume:missing-header"]);
+        expect((await getResumeEntity("missing-header"))?.companyName).toBe("Hidden Co");
     });
 
     it("validates local paths and magic bytes correctly", () => {

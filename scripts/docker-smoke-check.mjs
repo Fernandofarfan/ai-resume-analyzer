@@ -18,6 +18,8 @@ const content = readFileSync(dockerfilePath, "utf8");
 const requiredLayers = [
     "COPY --from=build-env /app/build/client /app/build/client",
     "COPY --from=build-env /app/server/index.mjs /app/server/index.mjs",
+    "COPY --from=build-env /app/server/config.mjs /app/server/config.mjs",
+    "COPY --from=build-env /app/server/ai.mjs /app/server/ai.mjs",
     "COPY --from=build-env /app/server/lib.mjs /app/server/lib.mjs",
     "COPY --from=build-env /app/shared /app/shared",
 ];
@@ -31,6 +33,8 @@ for (const layer of requiredLayers) {
 
 const requiredFiles = [
     join(ROOT, "server", "index.mjs"),
+    join(ROOT, "server", "config.mjs"),
+    join(ROOT, "server", "ai.mjs"),
     join(ROOT, "server", "lib.mjs"),
     join(ROOT, "shared", "schema.mjs"),
     join(ROOT, "shared", "limits.mjs"),
@@ -44,4 +48,6 @@ for (const file of requiredFiles) {
     }
 }
 
-console.log("✅ Docker packaging validation passed: All runtime layers and shared schemas are present!");
+console.log(
+    "✅ Docker packaging validation passed: All runtime layers and shared schemas are present!",
+);

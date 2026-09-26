@@ -27,7 +27,13 @@ describe("HTTP server endpoint integration tests", () => {
         const res = await fetch(`${baseUrl}/healthz`);
         expect(res.status).toBe(200);
         const data = await res.json();
-        expect(data).toEqual({ status: "ok" });
+        expect(data.status).toBe("ok");
+        expect(data.provider).toBeDefined();
+        expect(typeof data.uptimeSec).toBe("number");
+        expect(typeof data.heapUsedMb).toBe("number");
+        expect(typeof data.timestamp).toBe("string");
+        expect(data.activeRequests).toBe(0);
+        expect(data.maxConcurrent).toBeGreaterThan(0);
         expect(res.headers.get("x-content-type-options")).toBe("nosniff");
         expect(res.headers.get("x-frame-options")).toBe("DENY");
         expect(res.headers.get("x-request-id")).toBeDefined();
@@ -48,7 +54,9 @@ describe("HTTP server endpoint integration tests", () => {
         });
         expect(resMalicious.status).toBe(200);
         expect(resMalicious.headers.get("x-client-request-id")).toBeNull();
-        expect(/^[a-zA-Z0-9_\-]{1,64}$/.test(resMalicious.headers.get("x-request-id") || "")).toBe(true);
+        expect(/^[a-zA-Z0-9_-]{1,64}$/.test(resMalicious.headers.get("x-request-id") || "")).toBe(
+            true,
+        );
     });
 
     it("GET /api/config returns provider and consent status", async () => {
@@ -147,7 +155,7 @@ describe("HTTP server endpoint integration tests", () => {
         geminiCircuitBreaker.openedAt = Date.now();
 
         try {
-            const res = await fetch(`${baseUrl}/api/analyze`, {
+            await fetch(`${baseUrl}/api/analyze`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ message: "Test with open breaker", consent: true }),
@@ -158,7 +166,7 @@ describe("HTTP server endpoint integration tests", () => {
             await expect(
                 geminiCircuitBreaker.execute(async () => {
                     throw new Error("Should not execute");
-                })
+                }),
             ).rejects.toMatchObject({ isCircuitOpen: true });
         } finally {
             geminiCircuitBreaker.reset();
@@ -217,5 +225,23 @@ describe("HTTP server endpoint integration tests", () => {
         expect(res.headers.get("vary")).toBe("Accept-Encoding");
         // Node fetch automatically decompresses or exposes content-encoding
         expect(res.headers.get("content-type")).toContain("text/html");
+    });
+
+    it("rate limits API routes with 429 and Retry-After, while health probes stay exempt", async () => {
+        let limited = null;
+        for (let i = 0; i < 80; i++) {
+            const res = await fetch(`${baseUrl}/api/config`);
+            if (res.status === 429) {
+                limited = res;
+                break;
+            }
+        }
+        expect(limited).not.toBeNull();
+        expect(limited.headers.get("retry-after")).toBe("60");
+        const body = await limited.json();
+        expect(body.error).toBe("Too many requests");
+
+        const health = await fetch(`${baseUrl}/healthz`);
+        expect(health.status).toBe(200);
     });
 });

@@ -1,15 +1,17 @@
-FROM node:20-alpine AS build-env
+FROM node:22-alpine AS build-env
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 COPY --from=build-env /app/build/client /app/build/client
 COPY --from=build-env /app/server/index.mjs /app/server/index.mjs
+COPY --from=build-env /app/server/config.mjs /app/server/config.mjs
+COPY --from=build-env /app/server/ai.mjs /app/server/ai.mjs
 COPY --from=build-env /app/server/lib.mjs /app/server/lib.mjs
 COPY --from=build-env /app/shared /app/shared
 USER app

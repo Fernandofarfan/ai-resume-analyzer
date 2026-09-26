@@ -9,7 +9,9 @@ const LanguageSelector: React.FC<LanguageSelectorProps> = ({ className = "" }) =
     const { language, setLanguage, t } = useI18nStore();
 
     return (
-        <div className={`flex items-center bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-full p-1 shadow-xs transition-all duration-200 ${className}`}>
+        <div
+            className={`flex items-center bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-full p-1 shadow-xs transition-all duration-200 ${className}`}
+        >
             <button
                 type="button"
                 onClick={() => setLanguage("es")}

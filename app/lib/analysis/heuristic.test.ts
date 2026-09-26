@@ -48,15 +48,19 @@ describe("generateResumeFeedback", () => {
     it("returns null matchScore when no job description/title is provided", () => {
         const fb = generateResumeFeedback(
             { rawText: "Experiencia laboral en desarrollo de software" },
-            "es"
+            "es",
         );
         expect(fb.keywords?.matchScore).toBeNull();
     });
 
     it("computes a numeric matchScore when job info is provided", () => {
         const fb = generateResumeFeedback(
-            { rawText: "react javascript", jobTitle: "Frontend Developer", jobDescription: "react javascript css" },
-            "en"
+            {
+                rawText: "react javascript",
+                jobTitle: "Frontend Developer",
+                jobDescription: "react javascript css",
+            },
+            "en",
         );
         expect(typeof fb.keywords?.matchScore).toBe("number");
     });
@@ -76,8 +80,12 @@ describe("generateResumeFeedback", () => {
 
     it("returns a confidence level", () => {
         const fb = generateResumeFeedback(
-            { rawText: "react javascript typescript node css html", jobTitle: "Dev", jobDescription: "react javascript css" },
-            "en"
+            {
+                rawText: "react javascript typescript node css html",
+                jobTitle: "Dev",
+                jobDescription: "react javascript css",
+            },
+            "en",
         );
         expect(["low", "medium", "high"]).toContain(fb.confidence);
     });
@@ -106,7 +114,9 @@ describe("containsKeyword (synonyms/acronyms)", () => {
 
 describe("extractProfileSignals", () => {
     it("extracts years of experience", () => {
-        expect(extractProfileSignals("5 años de experiencia en desarrollo").yearsExperience).toBe(5);
+        expect(extractProfileSignals("5 años de experiencia en desarrollo").yearsExperience).toBe(
+            5,
+        );
         expect(extractProfileSignals("3+ years of experience").yearsExperience).toBe(3);
     });
 
@@ -121,7 +131,7 @@ describe("extractProfileSignals", () => {
 
     it("detects varied metric formats", () => {
         const signals = extractProfileSignals(
-            "boosted 1.5M users, +35% growth, 3x faster, €50k savings, USD 100,000 revenue"
+            "boosted 1.5M users, +35% growth, 3x faster, €50k savings, USD 100,000 revenue",
         );
         expect(signals.quantifiedAchievements).toBeGreaterThanOrEqual(3);
     });
@@ -129,11 +139,27 @@ describe("extractProfileSignals", () => {
 
 describe("computeConfidence", () => {
     it("returns low when there is no resume text", () => {
-        expect(computeConfidence({ wordCount: 0, targetKeywordCount: 5, hasJobDescription: true, metricCount: 2, hasResumeText: false })).toBe("low");
+        expect(
+            computeConfidence({
+                wordCount: 0,
+                targetKeywordCount: 5,
+                hasJobDescription: true,
+                metricCount: 2,
+                hasResumeText: false,
+            }),
+        ).toBe("low");
     });
 
     it("returns high when there is plenty of signal", () => {
-        expect(computeConfidence({ wordCount: 200, targetKeywordCount: 5, hasJobDescription: true, metricCount: 3, hasResumeText: true })).toBe("high");
+        expect(
+            computeConfidence({
+                wordCount: 200,
+                targetKeywordCount: 5,
+                hasJobDescription: true,
+                metricCount: 3,
+                hasResumeText: true,
+            }),
+        ).toBe("high");
     });
 });
 
@@ -162,14 +188,17 @@ describe("evidence-based score calibration", () => {
             Habilidades Técnicas:
             - React, TypeScript, Node.js, Docker, Kubernetes, AWS, SQL, GraphQL.
         `;
-        const fb = generateResumeFeedback({
-            rawText: fullResume,
-            jobTitle: "Senior Full Stack Engineer",
-            jobDescription: "Buscamos Senior Full Stack Engineer con experiencia en React, TypeScript, Node.js, Docker y Kubernetes.",
-        }, "es");
+        const fb = generateResumeFeedback(
+            {
+                rawText: fullResume,
+                jobTitle: "Senior Full Stack Engineer",
+                jobDescription:
+                    "Buscamos Senior Full Stack Engineer con experiencia en React, TypeScript, Node.js, Docker y Kubernetes.",
+            },
+            "es",
+        );
 
         expect(fb.overallScore).toBeGreaterThanOrEqual(75);
         expect(fb.confidence).toBe("high");
     });
 });
-

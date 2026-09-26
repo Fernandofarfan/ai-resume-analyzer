@@ -26,12 +26,22 @@ import { buildResumeHeader, computeAttachmentsStatus } from "~/domain/resume";
 
 export const meta = () => [
     { title: "CVision AI | Detailed Resume Audit Report" },
-    { name: "description", content: "Comprehensive ATS diagnosis, keyword gap analysis, and tailored recommendations." },
+    {
+        name: "description",
+        content: "Comprehensive ATS diagnosis, keyword gap analysis, and tailored recommendations.",
+    },
 ];
 
 type LoadState = "loading" | "ready" | "not-found" | "error" | "storage-error";
 
+// Remounting on `id` resets every piece of local state (loading flag, preview
+// URLs, cached data) without needing to re-initialize it inside an effect.
 const Resume = () => {
+    const { id } = useParams();
+    return <ResumeView key={id ?? "missing"} />;
+};
+
+const ResumeView = () => {
     const { fs, kv } = useAppStore();
     const { t, language } = useI18nStore();
     const { id } = useParams();
@@ -50,26 +60,13 @@ const Resume = () => {
     const resumeUrlRef = useRef<string | null>(null);
     const imageUrlRef = useRef<string | null>(null);
     const loadSeqRef = useRef(0);
-    const lastFocusLoadRef = useRef(Date.now());
+    const lastFocusLoadRef = useRef(0);
 
     const deleteDialogRef = useDialog(showDeleteConfirm, () => setShowDeleteConfirm(false));
 
     useEffect(() => {
         let cancelled = false;
-
-        setLoadState("loading");
-        setResumeData(null);
-        setNoTextWarning(false);
-        if (resumeUrlRef.current) {
-            URL.revokeObjectURL(resumeUrlRef.current);
-            resumeUrlRef.current = null;
-        }
-        if (imageUrlRef.current) {
-            URL.revokeObjectURL(imageUrlRef.current);
-            imageUrlRef.current = null;
-        }
-        setResumeUrl("");
-        setImageUrl("");
+        lastFocusLoadRef.current = Date.now();
 
         const loadResume = async () => {
             const seq = ++loadSeqRef.current;
@@ -98,15 +95,26 @@ const Resume = () => {
                             setLoadState("error");
                             return;
                         }
-                        const saveRes = await saveResumeEntity(migrated);
-                        if (!saveRes.success) {
+                        const expectedVersion =
+                            typeof rawObj.version === "number" ? rawObj.version : undefined;
+                        // Entity + header must be written as one unit: another tab
+                        // could otherwise observe a header without its entity.
+                        const upgraded = await withTabLock(`resume-write-${id}`, async () => {
+                            const saveRes = await saveResumeEntity(migrated, expectedVersion);
+                            if (!saveRes.success && saveRes.reason === "storage_error") {
+                                return null;
+                            }
+                            // On version_mismatch another tab already wrote a newer
+                            // record; keep that one instead of clobbering it.
+                            const entity = saveRes.entity;
+                            await kv.set(`resume:${id}`, JSON.stringify(buildResumeHeader(entity)));
+                            return entity;
+                        });
+                        if (!upgraded) {
                             setLoadState("error");
                             return;
                         }
-                        data = saveRes.entity;
-                        // Replace legacy bulky record in localStorage with light index header
-                        const header = buildResumeHeader(saveRes.entity);
-                        await kv.set(`resume:${id}`, JSON.stringify(header));
+                        data = upgraded;
                     } catch {
                         setLoadState("error");
                         return;
@@ -131,7 +139,9 @@ const Resume = () => {
                     setResumeUrl(newResUrl);
 
                     if (!data.rawText) {
-                        const pdfFile = new File([pdfBlob], "resume.pdf", { type: "application/pdf" });
+                        const pdfFile = new File([pdfBlob], "resume.pdf", {
+                            type: "application/pdf",
+                        });
                         const extracted = await extractPdfText(pdfFile);
                         if (cancelled || loadSeqRef.current !== seq) return;
                         data.rawText = extracted;
@@ -166,15 +176,24 @@ const Resume = () => {
                     setImageUrl("");
                 }
 
-                const verifiedStatus = computeAttachmentsStatus(Boolean(resumeBlob), Boolean(imageBlob));
+                const verifiedStatus = computeAttachmentsStatus(
+                    Boolean(resumeBlob),
+                    Boolean(imageBlob),
+                );
                 if (data.attachmentsStatus !== verifiedStatus || textWasExtracted) {
                     data.attachmentsStatus = verifiedStatus;
-                    const saveUpdated = await saveResumeEntity(data);
-                    if (saveUpdated.success) {
-                        data = saveUpdated.entity;
-                        const header = buildResumeHeader(data);
-                        await kv.set(`resume:${id}`, JSON.stringify(header));
-                    }
+                    const entityToSave: Resume = data;
+                    const previousVersion = entityToSave.version;
+                    const updated = await withTabLock(`resume-write-${id}`, async () => {
+                        const saveRes = await saveResumeEntity(entityToSave, previousVersion);
+                        if (!saveRes.success && saveRes.reason === "storage_error") {
+                            return null;
+                        }
+                        const entity = saveRes.entity;
+                        await kv.set(`resume:${id}`, JSON.stringify(buildResumeHeader(entity)));
+                        return entity;
+                    });
+                    if (updated) data = updated;
                 }
 
                 if (cancelled || loadSeqRef.current !== seq) return;
@@ -182,7 +201,9 @@ const Resume = () => {
                 setLoadState("ready");
             } catch (err) {
                 if (!cancelled && loadSeqRef.current === seq) {
-                    setLoadState(err instanceof StorageUnavailableError ? "storage-error" : "error");
+                    setLoadState(
+                        err instanceof StorageUnavailableError ? "storage-error" : "error",
+                    );
                 }
             }
         };
@@ -230,7 +251,7 @@ const Resume = () => {
         setDeleteError("");
         setIsDeleting(true);
         try {
-            await withTabLock(`resume-delete-${id}`, async () => {
+            await withTabLock(`resume-write-${id}`, async () => {
                 if (resumeData) {
                     if (resumeData.resumePath) await fs.delete(resumeData.resumePath);
                     if (resumeData.imagePath) await fs.delete(resumeData.imagePath);
@@ -303,8 +324,18 @@ const Resume = () => {
                         aria-label={t.resume.deleteResume}
                         title={t.resume.deleteResume}
                     >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
                         </svg>
                     </button>
                 </div>
@@ -330,10 +361,16 @@ const Resume = () => {
                             ⚠️
                         </div>
                         <div>
-                            <h3 id="delete-dialog-title" className="text-lg font-bold text-slate-900 dark:text-white">
+                            <h3
+                                id="delete-dialog-title"
+                                className="text-lg font-bold text-slate-900 dark:text-white"
+                            >
                                 {t.resume.deleteConfirmTitle}
                             </h3>
-                            <p id="delete-dialog-description" className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            <p
+                                id="delete-dialog-description"
+                                className="text-xs text-slate-500 dark:text-slate-400 mt-1"
+                            >
                                 {t.resume.deleteConfirmMessage}
                             </p>
                         </div>
@@ -365,8 +402,9 @@ const Resume = () => {
                 </div>
             )}
 
-            {/* Cover Letter Modal */}
-            {activeFeedback && (
+            {/* Cover Letter Modal (mounted only while open so the draft is
+                generated fresh from the current feedback) */}
+            {activeFeedback && isCoverLetterOpen && (
                 <CoverLetterModal
                     isOpen={isCoverLetterOpen}
                     onClose={() => setIsCoverLetterOpen(false)}
@@ -465,7 +503,12 @@ const Resume = () => {
                                     {imageUrl && resumeUrl ? (
                                         <div className="space-y-3">
                                             <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
-                                                <a href={resumeUrl} target="_blank" rel="noopener noreferrer" title={t.resume.openPdfNewTab}>
+                                                <a
+                                                    href={resumeUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    title={t.resume.openPdfNewTab}
+                                                >
                                                     <img
                                                         src={imageUrl}
                                                         alt={t.resume.previewTitle}
@@ -498,7 +541,10 @@ const Resume = () => {
                                 {activeFeedback ? (
                                     <>
                                         {/* Overall Summary Gauge */}
-                                        <Summary feedback={activeFeedback} analyzedAt={resumeData.analyzedAt} />
+                                        <Summary
+                                            feedback={activeFeedback}
+                                            analyzedAt={resumeData.analyzedAt}
+                                        />
 
                                         {/* Keyword Gap Tracker */}
                                         {activeFeedback.keywords && (
@@ -507,7 +553,10 @@ const Resume = () => {
 
                                         {/* ATS Breakdown */}
                                         <ATS
-                                            score={activeFeedback.ATS.score || activeFeedback.overallScore}
+                                            score={
+                                                activeFeedback.ATS.score ||
+                                                activeFeedback.overallScore
+                                            }
                                             suggestions={activeFeedback.ATS.tips || []}
                                         />
 
@@ -517,7 +566,9 @@ const Resume = () => {
                                 ) : (
                                     <div className="glass-card p-12 text-center space-y-4">
                                         <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                                        <p className="text-sm text-slate-500">{t.resume.generatingDiagnosis}</p>
+                                        <p className="text-sm text-slate-500">
+                                            {t.resume.generatingDiagnosis}
+                                        </p>
                                     </div>
                                 )}
                             </div>

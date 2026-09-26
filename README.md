@@ -12,7 +12,7 @@ Un analizador y optimizador de currículums de última generación impulsado por
 - ✨ **Reescritura de Viñetas con Fórmula de Google (XYZ)**: Sugerencias con placeholders para transformar responsabilidades pasivas en logros cuantificados.
 - ✉️ **Generador de Carta de Presentación**: Redacción basada en las competencias detectadas en tu CV, con opciones de copiado y descarga en `.txt`.
 - 🖨️ **Exportador de Reportes**: Exportación e impresión limpia del informe de auditoría.
-- 🌙 **Modo Oscuro / Claro**: Diseño moderno *Obsidian & Electric Indigo / Cyan* con persistencia de tema.
+- 🌙 **Modo Oscuro / Claro**: Diseño moderno _Obsidian & Electric Indigo / Cyan_ con persistencia de tema.
 - 🔐 **Claves de IA solo en el servidor**: Gemini/Groq/Ollama se configuran en el servidor; ninguna credencial llega al navegador.
 - 💾 **Persistencia local en el navegador**: Almacenamiento en `IndexedDB` y `localStorage` (local al dispositivo, sin servidores externos obligatorios).
 
@@ -74,26 +74,30 @@ Los proveedores remotos requieren arrancar el servidor incluido (`npm run build 
 ## 🚀 Inicio Rápido
 
 ### Requisitos previos
+
 - [Node.js](https://nodejs.org/) (versión 20 o superior)
 - [npm](https://www.npmjs.com/)
 
 ### Instalación
 
 1. Clona el repositorio:
-   ```bash
-   git clone <URL_DEL_REPOSITORIO>
-   cd ai-resume-analyzer
-   ```
+
+    ```bash
+    git clone <URL_DEL_REPOSITORIO>
+    cd ai-resume-analyzer
+    ```
 
 2. Instala las dependencias:
-   ```bash
-   npm install
-   ```
+
+    ```bash
+    npm install
+    ```
 
 3. Inicia el servidor de desarrollo:
-   ```bash
-   npm run dev
-   ```
+
+    ```bash
+    npm run dev
+    ```
 
 4. Abre [http://localhost:5173](http://localhost:5173) en tu navegador.
 

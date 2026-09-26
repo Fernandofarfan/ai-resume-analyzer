@@ -41,7 +41,11 @@ export const parseTips = (value) => {
 
 export const parseCategoryStrict = (value) => {
     if (!isRecord(value)) return null;
-    if (typeof value.score !== "number" || Number.isNaN(value.score) || !Number.isFinite(value.score)) {
+    if (
+        typeof value.score !== "number" ||
+        Number.isNaN(value.score) ||
+        !Number.isFinite(value.score)
+    ) {
         return null;
     }
     return {
@@ -52,7 +56,10 @@ export const parseCategoryStrict = (value) => {
 
 export const parseStringArray = (value, limit = MAX_KEYWORDS) => {
     if (!Array.isArray(value)) return [];
-    return value.slice(0, limit).map(parseString).filter((s) => s.length > 0);
+    return value
+        .slice(0, limit)
+        .map(parseString)
+        .filter((s) => s.length > 0);
 };
 
 export const parseKeywords = (value) => {
@@ -131,6 +138,43 @@ export const validateFeedback = (value) => {
 };
 
 export const normalizeFeedback = validateFeedback;
+
+// Canonical description of the feedback contract. Both the prompt that asks the
+// model for this shape and `validateFeedback` below come from this module, so
+// they cannot drift apart.
+export const FEEDBACK_JSON_SCHEMA = `{
+  "overallScore": number, // 0-100, honest and realistic
+  "ATS": {
+    "score": number, // 0-100, how well the resume passes ATS screening
+    "tips": [{ "type": "good" | "improve", "tip": string }] // 3-4 short tips
+  },
+  "toneAndStyle": {
+    "score": number, // 0-100
+    "tips": [{ "type": "good" | "improve", "tip": string, "explanation": string }] // 3-4 tips
+  },
+  "content": {
+    "score": number, // 0-100
+    "tips": [{ "type": "good" | "improve", "tip": string, "explanation": string }] // 3-4 tips
+  },
+  "structure": {
+    "score": number, // 0-100
+    "tips": [{ "type": "good" | "improve", "tip": string, "explanation": string }] // 3-4 tips
+  },
+  "skills": {
+    "score": number, // 0-100
+    "tips": [{ "type": "good" | "improve", "tip": string, "explanation": string }] // 3-4 tips
+  },
+  "keywords": { // REQUIRED when a job description is provided, otherwise omit it
+    "matchScore": number | null, // 0-100 overlap between resume and job description
+    "matching": string[], // keywords from the job description found in the resume
+    "missing": string[] // keywords from the job description missing from the resume
+  },
+  "bulletRewrites": [{ // optional, max 10
+    "originalTip": string,
+    "suggestedRewrite": string,
+    "reasoning": string
+  }]
+}`;
 
 export const parseFeedbackText = (text) => {
     if (!text || typeof text !== "string") return null;

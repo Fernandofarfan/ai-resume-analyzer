@@ -5,172 +5,190 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --font-sans:
+        system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+        sans-serif;
+    --font-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+        monospace;
 
-  --color-brand-primary: #6366f1;
-  --color-brand-primary-hover: #4f46e5;
-  --color-brand-secondary: #06b6d4;
-  --color-brand-accent: #8b5cf6;
+    --color-brand-primary: #6366f1;
+    --color-brand-primary-hover: #4f46e5;
+    --color-brand-secondary: #06b6d4;
+    --color-brand-accent: #8b5cf6;
 
-  --color-obsidian-950: #07090e;
-  --color-obsidian-900: #0b0f19;
-  --color-obsidian-850: #101626;
-  --color-obsidian-800: #172033;
-  --color-obsidian-700: #1e293b;
+    --color-obsidian-950: #07090e;
+    --color-obsidian-900: #0b0f19;
+    --color-obsidian-850: #101626;
+    --color-obsidian-800: #172033;
+    --color-obsidian-700: #1e293b;
 
-  --color-badge-green: #059669;
-  --color-badge-yellow: #d97706;
-  --color-badge-red: #e11d48;
+    --color-badge-green: #059669;
+    --color-badge-yellow: #d97706;
+    --color-badge-red: #e11d48;
 }
 
 html,
 body {
-  @apply antialiased transition-colors duration-300;
-  font-family: var(--font-sans);
+    @apply antialiased transition-colors duration-300;
+    font-family: var(--font-sans);
 }
 
 /* Light & Dark Base Backgrounds */
 body {
-  @apply bg-slate-50 text-slate-900 dark:bg-[#080c14] dark:text-slate-100;
-  min-height: 100vh;
+    @apply bg-slate-50 text-slate-900 dark:bg-[#080c14] dark:text-slate-100;
+    min-height: 100vh;
 }
 
 /* Modern Heading styles */
 h1 {
-  @apply text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight;
+    @apply text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight;
 }
 
 h2 {
-  @apply text-2xl sm:text-3xl font-bold tracking-tight;
+    @apply text-2xl sm:text-3xl font-bold tracking-tight;
 }
 
 h3 {
-  @apply text-xl font-semibold;
+    @apply text-xl font-semibold;
 }
 
 /* Modern Form Elements */
 input,
 textarea {
-  @apply w-full p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/80 backdrop-blur-md text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all duration-200 shadow-xs;
+    @apply w-full p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/80 backdrop-blur-md text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all duration-200 shadow-xs;
 }
 
 label {
-  @apply text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5;
+    @apply text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5;
 }
 
 form {
-  @apply flex flex-col items-start gap-6 w-full;
+    @apply flex flex-col items-start gap-6 w-full;
 }
 
 /* Cyber Grid / Mesh Background utilities */
 @utility bg-cyber-grid {
-  background-color: #f8fafc;
-  background-image:
-    radial-gradient(ellipse at 50% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 50%, rgba(6, 182, 212, 0.06) 0%, transparent 50%),
-    linear-gradient(to right, rgba(148, 163, 184, 0.2) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.2) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
-
-  @variant dark {
-    background-color: #080c14;
+    background-color: #f8fafc;
     background-image:
-      radial-gradient(ellipse at 50% 0%, rgba(99, 102, 241, 0.22) 0%, transparent 65%),
-      radial-gradient(ellipse at 80% 50%, rgba(6, 182, 212, 0.12) 0%, transparent 50%),
-      linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  }
+        radial-gradient(ellipse at 50% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 50%, rgba(6, 182, 212, 0.06) 0%, transparent 50%),
+        linear-gradient(to right, rgba(148, 163, 184, 0.2) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.2) 1px, transparent 1px);
+    background-size:
+        100% 100%,
+        100% 100%,
+        32px 32px,
+        32px 32px;
+
+    @variant dark {
+        background-color: #080c14;
+        background-image:
+            radial-gradient(ellipse at 50% 0%, rgba(99, 102, 241, 0.22) 0%, transparent 65%),
+            radial-gradient(ellipse at 80% 50%, rgba(6, 182, 212, 0.12) 0%, transparent 50%),
+            linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    }
 }
 
 @utility text-gradient {
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  background-image: linear-gradient(135deg, #4f46e5 0%, #06b6d4 50%, #8b5cf6 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    background-image: linear-gradient(135deg, #4f46e5 0%, #06b6d4 50%, #8b5cf6 100%);
 
-  @variant dark {
-    background-image: linear-gradient(135deg, #818cf8 0%, #38bdf8 50%, #c084fc 100%);
-  }
+    @variant dark {
+        background-image: linear-gradient(135deg, #818cf8 0%, #38bdf8 50%, #c084fc 100%);
+    }
 }
 
 @utility primary-button {
-  @apply relative inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 active:scale-98 transition-all duration-200 shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none;
+    @apply relative inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 active:scale-98 transition-all duration-200 shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none;
 }
 
 @utility secondary-button {
-  @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-700/90 border border-slate-200 dark:border-slate-700 active:scale-98 transition-all duration-200 shadow-xs cursor-pointer;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-700/90 border border-slate-200 dark:border-slate-700 active:scale-98 transition-all duration-200 shadow-xs cursor-pointer;
 }
 
 @utility glass-card {
-  @apply bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800/80 rounded-2xl shadow-sm dark:shadow-none hover:shadow-md transition-all duration-200;
+    @apply bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800/80 rounded-2xl shadow-sm dark:shadow-none hover:shadow-md transition-all duration-200;
 }
 
 @utility gradient-border {
-  @apply relative p-1 rounded-2xl bg-gradient-to-b from-indigo-500/20 via-cyan-500/10 to-transparent;
+    @apply relative p-1 rounded-2xl bg-gradient-to-b from-indigo-500/20 via-cyan-500/10 to-transparent;
 }
 
 /* Animations */
 @keyframes pulseGlow {
-  0%, 100% {
-    opacity: 0.6;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.9;
-    transform: scale(1.03);
-  }
+    0%,
+    100% {
+        opacity: 0.6;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.9;
+        transform: scale(1.03);
+    }
 }
 
 .glow-animation {
-  animation: pulseGlow 4s ease-in-out infinite;
+    animation: pulseGlow 4s ease-in-out infinite;
 }
 
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+    width: 8px;
+    height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
-  border-radius: 9999px;
+    background: rgba(148, 163, 184, 0.4);
+    border-radius: 9999px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(51, 65, 85, 0.6);
+    background: rgba(51, 65, 85, 0.6);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.6);
+    background: rgba(99, 102, 241, 0.6);
 }
 
 /* Print Optimization */
 @media print {
-  body {
-    background: #ffffff !important;
-    color: #000000 !important;
-  }
+    body {
+        background: #ffffff !important;
+        color: #000000 !important;
+    }
 
-  nav,
-  button,
-  .no-print {
-    display: none !important;
-  }
+    nav,
+    button,
+    [role="dialog"],
+    [role="alertdialog"],
+    .no-print {
+        display: none !important;
+    }
 
-  .glass-card {
-    background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    box-shadow: none !important;
-    backdrop-filter: none !important;
-    page-break-inside: avoid;
-  }
+    /* Dark mode would otherwise print white text on white paper. */
+    .dark,
+    .dark * {
+        color: #000000 !important;
+        background-color: transparent !important;
+    }
 
-  a[href]:after {
-    content: "" !important;
-  }
+    .glass-card {
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        page-break-inside: avoid;
+    }
+
+    a[href]:after {
+        content: "" !important;
+    }
 }

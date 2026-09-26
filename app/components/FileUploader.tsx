@@ -11,9 +11,12 @@ interface FileUploaderProps {
 const FileUploader = ({ file = null, onFileSelect }: FileUploaderProps) => {
     const { t } = useI18nStore();
 
-    const onDrop = useCallback((acceptedFiles: File[]) => {
-        onFileSelect?.(acceptedFiles[0] || null);
-    }, [onFileSelect]);
+    const onDrop = useCallback(
+        (acceptedFiles: File[]) => {
+            onFileSelect?.(acceptedFiles[0] || null);
+        },
+        [onFileSelect],
+    );
 
     const maxFileSize = 20 * 1024 * 1024; // 20MB in bytes
 
@@ -37,7 +40,10 @@ const FileUploader = ({ file = null, onFileSelect }: FileUploaderProps) => {
     return (
         <div className="w-full">
             {rejectionMessage && (
-                <p role="alert" className="mb-2 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                <p
+                    role="alert"
+                    className="mb-2 text-xs font-semibold text-rose-600 dark:text-rose-400"
+                >
                     {rejectionMessage}
                 </p>
             )}
@@ -47,8 +53,8 @@ const FileUploader = ({ file = null, onFileSelect }: FileUploaderProps) => {
                     isDragActive
                         ? "border-indigo-500 bg-indigo-500/10 dark:bg-indigo-500/20 scale-101 ring-4 ring-indigo-500/20"
                         : file
-                        ? "border-emerald-500/50 bg-emerald-500/5 dark:bg-emerald-500/10"
-                        : "border-slate-300 dark:border-slate-700/80 bg-white/60 dark:bg-slate-900/60 hover:border-indigo-500/60 hover:bg-slate-50 dark:hover:bg-slate-900/90"
+                          ? "border-emerald-500/50 bg-emerald-500/5 dark:bg-emerald-500/10"
+                          : "border-slate-300 dark:border-slate-700/80 bg-white/60 dark:bg-slate-900/60 hover:border-indigo-500/60 hover:bg-slate-50 dark:hover:bg-slate-900/90"
                 }`}
             >
                 <input {...getInputProps()} />
@@ -81,16 +87,36 @@ const FileUploader = ({ file = null, onFileSelect }: FileUploaderProps) => {
                             aria-label={t.upload.removeFile}
                             title={t.upload.removeFile}
                         >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
                             </svg>
                         </button>
                     </div>
                 ) : (
                     <div className="space-y-3">
                         <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-indigo-500/20 to-cyan-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-inner">
-                            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            <svg
+                                className="w-7 h-7"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                                />
                             </svg>
                         </div>
                         <div className="space-y-1">

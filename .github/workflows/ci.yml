@@ -1,120 +1,153 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+    push:
+        branches: [main]
+    pull_request:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
 
 jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    verify:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        strategy:
+            fail-fast: false
+            matrix:
+                node-version: [20, 22, 24]
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Setup Node
-        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
-        with:
-          node-version: 20
-          cache: npm
+            - name: Setup Node
+              uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+              with:
+                  node-version: ${{ matrix.node-version }}
+                  cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+            - name: Install dependencies
+              run: npm ci
 
-      - name: Dependency security audit
-        run: npm audit --audit-level=high
+            - name: Dependency security audit
+              run: npm audit --audit-level=high
 
-      - name: Server syntax check
-        run: npm run check:server
+            - name: Server syntax check
+              run: npm run check:server
 
-      - name: Lint and Typecheck
-        run: npm run lint
+            - name: Lint and Typecheck
+              run: npm run lint
 
-      - name: Test Suite (Unit, Storage & Integration)
-        run: npm run test
+            - name: Production Build
+              run: npm run build
 
-      - name: Production Build
-        run: npm run build
+            - name: Test Suite (Unit, Storage & Integration)
+              run: npm run test:coverage
 
-  docker:
-    runs-on: ubuntu-latest
-    needs: verify
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+            - name: Upload coverage report
+              if: matrix.node-version == 24
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+              with:
+                  name: coverage
+                  path: coverage/lcov.info
+                  if-no-files-found: ignore
 
-      - name: Build image
-        run: docker build -t cvision-ai .
+    docker:
+        runs-on: ubuntu-latest
+        needs: verify
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Comprehensive container smoke test
-        run: |
-          trap 'docker rm -f cvision 2>/dev/null || true' EXIT
-          docker run -d --name cvision -p 3000:3000 -e AI_PROVIDER=offline cvision-ai
-          for i in $(seq 1 25); do
-            if curl -fsS http://127.0.0.1:3000/healthz; then break; fi
-            sleep 1
-          done
+            - name: Build image
+              run: docker build -t cvision-ai .
 
-          # 1. Root SPA route (GET)
-          curl -fsS http://127.0.0.1:3000/ > /dev/null
+            # Report-only: unfixed base-image CVEs are filtered out, and the table is
+            # printed for every run. Set `exit-code: "1"` to make CRITICAL/HIGH
+            # findings block the pipeline once the base image is kept current.
+            - name: Scan image for vulnerabilities
+              uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+              with:
+                  image-ref: cvision-ai:latest
+                  format: table
+                  exit-code: "0"
+                  severity: CRITICAL,HIGH
+                  ignore-unfixed: true
+                  scanners: vuln
 
-          # 2. Root SPA route (HEAD)
-          STATUS_HEAD=$(curl -s -o /dev/null -w "%{http_code}" -I http://127.0.0.1:3000/)
-          if [ "$STATUS_HEAD" -ne 200 ]; then
-            echo "Expected 200 for HEAD /, got $STATUS_HEAD"
-            exit 1
-          fi
+            - name: Comprehensive container smoke test
+              run: |
+                  trap 'docker rm -f cvision 2>/dev/null || true' EXIT
+                  docker run -d --name cvision -p 3000:3000 -e AI_PROVIDER=offline cvision-ai
+                  for i in $(seq 1 25); do
+                    if curl -fsS http://127.0.0.1:3000/healthz; then break; fi
+                    sleep 1
+                  done
 
-          # 3. Method Not Allowed on static routes (POST /)
-          STATUS_405=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/)
-          if [ "$STATUS_405" -ne 405 ]; then
-            echo "Expected 405 for POST /, got $STATUS_405"
-            exit 1
-          fi
+                  # 1. Root SPA route (GET)
+                  curl -fsS http://127.0.0.1:3000/ > /dev/null
 
-          # 4. Source map files blocked in production
-          STATUS_MAP=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/assets/index.js.map)
-          if [ "$STATUS_MAP" -ne 404 ]; then
-            echo "Expected 404 for .map file, got $STATUS_MAP"
-            exit 1
-          fi
+                  # 2. Root SPA route (HEAD)
+                  STATUS_HEAD=$(curl -s -o /dev/null -w "%{http_code}" -I http://127.0.0.1:3000/)
+                  if [ "$STATUS_HEAD" -ne 200 ]; then
+                    echo "Expected 200 for HEAD /, got $STATUS_HEAD"
+                    exit 1
+                  fi
 
-          # 5. Security and Request ID headers present
-          HEADERS=$(curl -s -I http://127.0.0.1:3000/healthz)
-          echo "$HEADERS" | grep -qi "x-request-id" || { echo "Missing X-Request-Id header"; exit 1; }
-          echo "$HEADERS" | grep -qi "content-security-policy" || { echo "Missing CSP header"; exit 1; }
+                  # 3. Method Not Allowed on static routes (POST /)
+                  STATUS_405=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/)
+                  if [ "$STATUS_405" -ne 405 ]; then
+                    echo "Expected 405 for POST /, got $STATUS_405"
+                    exit 1
+                  fi
 
-          # 6. Config endpoint
-          CONFIG_RES=$(curl -fsS http://127.0.0.1:3000/api/config)
-          echo "Config: $CONFIG_RES"
+                  # 4. Source map files blocked in production
+                  STATUS_MAP=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/assets/index.js.map)
+                  if [ "$STATUS_MAP" -ne 404 ]; then
+                    echo "Expected 404 for .map file, got $STATUS_MAP"
+                    exit 1
+                  fi
 
-          # 7. Analyze endpoint with offline engine
-          ANALYZE_RES=$(curl -fsS -X POST http://127.0.0.1:3000/api/analyze \
-            -H "Content-Type: application/json" \
-            -d '{"message":"test resume prompt","consent":true}')
-          echo "Analyze result: $ANALYZE_RES"
+                  # 5. Security and Request ID headers present
+                  HEADERS=$(curl -s -I http://127.0.0.1:3000/healthz)
+                  echo "$HEADERS" | grep -qi "x-request-id" || { echo "Missing X-Request-Id header"; exit 1; }
+                  echo "$HEADERS" | grep -qi "content-security-policy" || { echo "Missing CSP header"; exit 1; }
 
-          # 8. Unsupported Media Type returns 415
-          STATUS_415=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/api/analyze \
-            -H "Content-Type: text/plain" \
-            -d 'plain text')
-          if [ "$STATUS_415" -ne 415 ]; then
-            echo "Expected 415 for non-JSON content type, got $STATUS_415"
-            exit 1
-          fi
+                  # 6. Config endpoint
+                  CONFIG_RES=$(curl -fsS http://127.0.0.1:3000/api/config)
+                  echo "Config: $CONFIG_RES"
 
-          # 9. Unknown API route returns 404
-          STATUS_404=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/unknown-endpoint)
-          if [ "$STATUS_404" -ne 404 ]; then
-            echo "Expected 404 for unknown API route, got $STATUS_404"
-            exit 1
-          fi
+                  # 7. Analyze endpoint with offline engine
+                  ANALYZE_RES=$(curl -fsS -X POST http://127.0.0.1:3000/api/analyze \
+                    -H "Content-Type: application/json" \
+                    -d '{"message":"test resume prompt","consent":true}')
+                  echo "Analyze result: $ANALYZE_RES"
 
-          # 10. Invalid JSON body returns 400
-          STATUS_400=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/api/analyze \
-            -H "Content-Type: application/json" \
-            -d 'invalid-json')
-          if [ "$STATUS_400" -ne 400 ]; then
-            echo "Expected 400 for malformed payload, got $STATUS_400"
-            exit 1
-          fi
+                  # 8. Unsupported Media Type returns 415
+                  STATUS_415=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/api/analyze \
+                    -H "Content-Type: text/plain" \
+                    -d 'plain text')
+                  if [ "$STATUS_415" -ne 415 ]; then
+                    echo "Expected 415 for non-JSON content type, got $STATUS_415"
+                    exit 1
+                  fi
+
+                  # 9. Unknown API route returns 404
+                  STATUS_404=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/unknown-endpoint)
+                  if [ "$STATUS_404" -ne 404 ]; then
+                    echo "Expected 404 for unknown API route, got $STATUS_404"
+                    exit 1
+                  fi
+
+                  # 10. Invalid JSON body returns 400
+                  STATUS_400=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/api/analyze \
+                    -H "Content-Type: application/json" \
+                    -d 'invalid-json')
+                  if [ "$STATUS_400" -ne 400 ]; then
+                    echo "Expected 400 for malformed payload, got $STATUS_400"
+                    exit 1
+                  fi

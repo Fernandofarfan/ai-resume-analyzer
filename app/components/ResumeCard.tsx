@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import ScoreCircle from "~/components/ScoreCircle";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "~/lib/store";
 import { useI18nStore } from "~/lib/i18n";
 import type { ResumeHeader, Resume } from "~/domain/resume";
@@ -15,6 +15,10 @@ const ResumeCard = ({
     const { fs } = useAppStore();
     const { t } = useI18nStore();
     const [resumeUrl, setResumeUrl] = useState("");
+    const cardRef = useRef<HTMLDivElement>(null);
+    // Thumbnails are only read from IndexedDB once the card approaches the
+    // viewport, so a long list does not decode every preview up front.
+    const [nearViewport, setNearViewport] = useState(false);
 
     const id = resume.id;
     const companyName = resume.companyName;
@@ -28,19 +32,42 @@ const ResumeCard = ({
 
     const matchScore =
         (resume as Resume).feedback?.keywords?.matchScore ??
-        ((resume as ResumeHeader).matchingKeywords && (resume as ResumeHeader).matchingKeywords!.length > 0
+        ((resume as ResumeHeader).matchingKeywords &&
+        (resume as ResumeHeader).matchingKeywords!.length > 0
             ? Math.round(
                   ((resume as ResumeHeader).matchingKeywords!.length /
                       Math.max(
                           1,
                           (resume as ResumeHeader).matchingKeywords!.length +
-                              ((resume as ResumeHeader).missingKeywords?.length || 0)
+                              ((resume as ResumeHeader).missingKeywords?.length || 0),
                       )) *
-                      100
+                      100,
               )
             : undefined);
 
     useEffect(() => {
+        const node = cardRef.current;
+        if (nearViewport) return;
+        if (!node || typeof IntersectionObserver === "undefined") {
+            // No observer support: fall back to loading immediately.
+            setNearViewport(true);
+            return;
+        }
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    setNearViewport(true);
+                    observer.disconnect();
+                }
+            },
+            { rootMargin: "300px 0px" },
+        );
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [nearViewport]);
+
+    useEffect(() => {
+        if (!nearViewport || !imagePath) return;
         let cancelled = false;
         let createdUrl: string | null = null;
 
@@ -61,7 +88,7 @@ const ResumeCard = ({
             cancelled = true;
             if (createdUrl) URL.revokeObjectURL(createdUrl);
         };
-    }, [imagePath, fs]);
+    }, [imagePath, fs, nearViewport]);
 
     const handleDeleteClick = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -72,7 +99,10 @@ const ResumeCard = ({
     };
 
     return (
-        <div className="relative group w-full sm:w-[380px] lg:w-[420px] glass-card flex flex-col justify-between h-[480px] p-5 hover:border-indigo-500/50 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-300 rounded-3xl overflow-hidden">
+        <div
+            ref={cardRef}
+            className="relative group w-full sm:w-[380px] lg:w-[420px] glass-card flex flex-col justify-between h-[480px] p-5 hover:border-indigo-500/50 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-300 rounded-3xl overflow-hidden"
+        >
             {/* Primary navigation overlay link for whole card */}
             <Link
                 to={`/resume/${id}`}
@@ -92,9 +122,7 @@ const ResumeCard = ({
                         {jobTitle || t.home.defaultResumeTitle}
                     </h3>
                     {!companyName && !jobTitle && (
-                        <span className="text-xs text-slate-400">
-                            {t.home.defaultResumeTitle}
-                        </span>
+                        <span className="text-xs text-slate-400">{t.home.defaultResumeTitle}</span>
                     )}
                 </div>
 
@@ -108,8 +136,18 @@ const ResumeCard = ({
                             aria-label={t.resume.deleteResume}
                             title={t.resume.deleteResume}
                         >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
                             </svg>
                         </button>
                     )}
@@ -122,6 +160,8 @@ const ResumeCard = ({
                     <img
                         src={resumeUrl}
                         alt={`${jobTitle || t.home.defaultResumeTitle}${companyName ? ` - ${companyName}` : ""}`}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-cover object-top opacity-90 group-hover:opacity-100 group-hover:scale-102 transition-all duration-300"
                     />
                 ) : (
@@ -135,7 +175,12 @@ const ResumeCard = ({
             <div className="relative z-10 pt-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pointer-events-none">
                 <span className="flex items-center gap-1">
                     <span>⚡</span>
-                    <span>ATS: <strong className="text-slate-700 dark:text-slate-200">{overallScore}%</strong></span>
+                    <span>
+                        ATS:{" "}
+                        <strong className="text-slate-700 dark:text-slate-200">
+                            {overallScore}%
+                        </strong>
+                    </span>
                 </span>
                 <div className="flex items-center gap-2">
                     {resume.attachmentsStatus && resume.attachmentsStatus !== "complete" && (

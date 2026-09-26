@@ -12,7 +12,9 @@ describe("PDF text extraction and multi-column heuristics", () => {
             ];
 
             const text = buildPageText(items);
-            expect(text).toBe("Jane Doe\nSenior Software Engineer\nExperience\nTech Corp - Lead Architect");
+            expect(text).toBe(
+                "Jane Doe\nSenior Software Engineer\nExperience\nTech Corp - Lead Architect",
+            );
         });
 
         it("concatenates tokens on the same horizontal line with spaces", () => {
@@ -44,7 +46,10 @@ describe("PDF text extraction and multi-column heuristics", () => {
             const singleColumn = [
                 { str: "John Smith", transform: [1, 0, 0, 1, 50, 700] },
                 { str: "Summary of Experience", transform: [1, 0, 0, 1, 50, 680] },
-                { str: "Software Developer with 5 years experience", transform: [1, 0, 0, 1, 50, 660] },
+                {
+                    str: "Software Developer with 5 years experience",
+                    transform: [1, 0, 0, 1, 50, 660],
+                },
                 { str: "Education: BS Computer Science", transform: [1, 0, 0, 1, 50, 640] },
             ];
 
