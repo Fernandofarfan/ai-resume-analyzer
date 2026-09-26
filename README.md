@@ -77,7 +77,7 @@ Los proveedores remotos requieren arrancar el servidor incluido (`npm run build 
 
 ### Requisitos previos
 
-- [Node.js](https://nodejs.org/) (versión 20 o superior)
+- [Node.js](https://nodejs.org/) (versión 22 o superior)
 - [npm](https://www.npmjs.com/)
 
 ### Instalación
