@@ -1,11 +1,11 @@
 import { defineConfig } from "vitest/config";
-import tsconfigPaths from "vite-tsconfig-paths";
 
 // The React Router Vite plugin expects the dev-server preamble that only exists
 // when an HTML entry is served, so tests resolve the `~/*` alias on their own
 // instead of loading `vite.config.ts` wholesale.
 export default defineConfig({
-    plugins: [tsconfigPaths()],
+    // Vite 8 resolves tsconfig `paths` natively (replaces vite-tsconfig-paths).
+    resolve: { tsconfigPaths: true },
     test: {
         setupFiles: ["app/test-setup.ts"],
         coverage: {
