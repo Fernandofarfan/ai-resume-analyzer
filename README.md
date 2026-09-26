@@ -1,5 +1,7 @@
 # CVision AI — Smart ATS Resume Analyzer & Optimizer
 
+[![CI](https://github.com/Fernandofarfan/ai-resume-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/Fernandofarfan/ai-resume-analyzer/actions/workflows/ci.yml)
+
 Un analizador y optimizador de currículums de última generación impulsado por algoritmos heurísticos ATS e inteligencia artificial, construido con **React 19**, **React Router v7**, **Tailwind CSS v4**, y **TypeScript**.
 
 ---
@@ -20,7 +22,7 @@ Un analizador y optimizador de currículums de última generación impulsado por
 
 ## 🔒 Privacidad y seguridad
 
-- Las **claves de API** de los proveedores de IA se leen **únicamente desde el servidor** (`server/index.mjs`) a través de variables de entorno sin prefijo `VITE_`. Nunca se incluyen en el bundle del navegador.
+- Las **claves de API** de los proveedores de IA se leen **únicamente desde el servidor** (`server/config.mjs`) a través de variables de entorno sin prefijo `VITE_`. Nunca se incluyen en el bundle del navegador.
 - El endpoint `/api/analyze` aplica **rate limiting** (por IP, ventana deslizante y cuota diaria), **presupuesto global diario**, **límite de concurrencia**, **timeout** en las llamadas a proveedores, validación del tamaño del prompt y rechazo de orígenes cruzados. Además exige **consentimiento explícito** antes de reenviar el CV a un proveedor remoto (fail closed). Para una app pública, protege el endpoint con autenticación real mediante un reverse proxy (cookie `HttpOnly`, OAuth, etc.).
 - El análisis se realiza por defecto con el **motor heurístico local** (`AI_PROVIDER=offline`), por lo que el CV **no sale de tu dispositivo**.
 - Si activas un proveedor remoto (Gemini/Groq), el contenido de tu CV y la oferta laboral **se envían a ese proveedor** para generar el análisis. La aplicación solicita un **consentimiento explícito** antes de hacerlo.
@@ -125,9 +127,26 @@ docker run -p 3000:3000 --env-file .env cvision-ai
 
 - `npm run dev`: Inicia el servidor de desarrollo local.
 - `npm run build`: Compila la aplicación para producción en modo SPA.
-- `npm run typecheck`: Valida tipos de TypeScript y React Router typegen.
 - `npm run start`: Inicia el servidor de producción (sirve la SPA + API de IA).
-- `npm run test`: Ejecuta las pruebas unitarias (Vitest).
+- `npm run typecheck`: Genera los tipos de React Router y valida TypeScript.
+- `npm run lint`: ESLint + verificación de formato + `check:server` + `check:docker-config` + `typecheck`.
+- `npm run lint:fix`: Aplica las correcciones automáticas de ESLint y Prettier.
+- `npm run format` / `npm run format:check`: Formatea / verifica el formato del código.
+- `npm run test`: Ejecuta las pruebas unitarias, de almacenamiento e integración (Vitest).
+- `npm run test:coverage`: Ejecuta la suite con informe de cobertura (`coverage/`).
+- `npm run check:server`: Comprueba la sintaxis de los módulos del servidor (`server/*.mjs`).
+- `npm run check:docker-config`: Valida que el `Dockerfile` y los scripts de arranque sean coherentes.
+
+---
+
+## 🧱 Arquitectura
+
+- `server/index.mjs`: servidor HTTP (rutas, estáticos, `healthz`, `/api/analyze`).
+- `server/config.mjs`: variables de entorno, validación y cabeceras de seguridad (CSP).
+- `server/ai.mjs`: adaptadores de proveedores de IA, reintentos y circuit breakers.
+- `app/lib/storage/`: persistencia en IndexedDB dividida en `idb`, `blobs`, `resumes`, `backups` y `gc`.
+- `app/lib/hooks/useResumeList.ts`: lógica de listado/gestion de CVs consumida por `app/routes/home.tsx`.
+- `shared/`: tipos y validaciones compartidos entre cliente y servidor.
 
 ---
 

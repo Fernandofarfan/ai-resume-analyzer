@@ -41,15 +41,20 @@ const header: ResumeHeader = {
 
 describe("ResumeCard", () => {
     beforeAll(() => {
-        const holder = globalThis as { IntersectionObserver?: unknown; URL: typeof URL };
+        const holder = globalThis as { IntersectionObserver?: unknown };
         holder.IntersectionObserver = TestIntersectionObserver;
-        if (!("createObjectURL" in URL)) {
-            Object.defineProperty(URL, "createObjectURL", {
-                value: () => "blob:resume-preview",
-                configurable: true,
-            });
-            Object.defineProperty(URL, "revokeObjectURL", { value: () => {}, configurable: true });
-        }
+        // Always override: jsdom >= 30 ships a native createObjectURL that throws
+        // on Node's Blob (`_bytes` is undefined) instead of returning a blob URL.
+        Object.defineProperty(URL, "createObjectURL", {
+            value: () => "blob:resume-preview",
+            configurable: true,
+            writable: true,
+        });
+        Object.defineProperty(URL, "revokeObjectURL", {
+            value: () => {},
+            configurable: true,
+            writable: true,
+        });
     });
 
     beforeEach(() => {
@@ -65,11 +70,9 @@ describe("ResumeCard", () => {
     });
 
     afterEach(() => {
-        if ("createObjectURL" in URL) {
-            (URL as { createObjectURL?: (b: Blob) => string }).createObjectURL = vi.fn(
-                () => "blob:resume-preview",
-            );
-        }
+        (URL as { createObjectURL: (blob: Blob) => string }).createObjectURL = vi.fn(
+            () => "blob:resume-preview",
+        );
     });
 
     it("defers reading the thumbnail until the card nears the viewport", async () => {

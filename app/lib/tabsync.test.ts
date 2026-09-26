@@ -40,21 +40,25 @@ describe("tabsync coordination and optimistic versioning", () => {
     });
 
     it("handles concurrent sequential lock acquisition under withTabLock", async () => {
-        const order: number[] = [];
-        const p1 = withTabLock("shared-resource", async () => {
-            await new Promise((r) => setTimeout(r, 60));
-            order.push(1);
-            return 1;
-        });
-        const p2 = withTabLock("shared-resource", async () => {
-            order.push(2);
-            return 2;
-        });
+        const completed: number[] = [];
+        let active = 0;
+        let maxActive = 0;
+        const track = (id: number, delayMs: number) =>
+            withTabLock("shared-resource", async () => {
+                active += 1;
+                maxActive = Math.max(maxActive, active);
+                await new Promise((r) => setTimeout(r, delayMs));
+                completed.push(id);
+                active -= 1;
+                return id;
+            });
 
-        const [r1, r2] = await Promise.all([p1, p2]);
+        const [r1, r2] = await Promise.all([track(1, 60), track(2, 0)]);
         expect(r1).toBe(1);
         expect(r2).toBe(2);
-        expect(order).toEqual([1, 2]);
+        // The contract is mutual exclusion, not which caller wins the race.
+        expect(maxActive).toBe(1);
+        expect([...completed].sort((a, b) => a - b)).toEqual([1, 2]);
     });
 
     it("serializes concurrent callbacks through the process lock", async () => {
