@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useI18nStore } from "~/lib/i18n";
 import { useDialog } from "~/lib/useDialog";
 import { extractProfileSignals } from "~/lib/analysis/heuristic";
@@ -14,61 +14,64 @@ interface CoverLetterModalProps {
     feedback: Feedback;
 }
 
-const CoverLetterModal: React.FC<CoverLetterModalProps> = ({
-    isOpen,
-    onClose,
+interface LetterInput {
+    language: string;
+    companyName?: string;
+    jobTitle?: string;
+    jobDescription: string;
+    resumeText: string;
+    feedback: Feedback;
+    recipient: string;
+}
+
+const generateCoverLetter = ({
+    language,
     companyName,
     jobTitle,
-    jobDescription = "",
-    resumeText = "",
+    jobDescription,
+    resumeText,
     feedback,
-}) => {
-    const { t, language } = useI18nStore();
-    const [letterText, setLetterText] = useState("");
-    const [copied, setCopied] = useState(false);
-    const [copyError, setCopyError] = useState(false);
-    const dialogRef = useDialog(isOpen, onClose);
+    recipient,
+}: LetterInput): string => {
+    const isSpanish = language === "es";
+    const date = new Date().toLocaleDateString(isSpanish ? "es-ES" : "en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+    });
 
-    useEffect(() => {
-        if (isOpen) {
-            const isSpanish = language === "es";
-            const date = new Date().toLocaleDateString(isSpanish ? "es-ES" : "en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-            });
+    const company = companyName || (isSpanish ? "su organización" : "your organization");
+    const role = jobTitle || (isSpanish ? "el puesto objetivo" : "the target role");
 
-            const company = companyName || (isSpanish ? "su organización" : "your organization");
-            const role = jobTitle || (isSpanish ? "el puesto objetivo" : "the target role");
+    // Only use skills that were actually detected in the resume — never
+    // invent qualifications the candidate did not provide.
+    const detectedSkills = (feedback.keywords?.matching || []).slice(0, 4);
+    const signals = extractProfileSignals(resumeText);
+    const hasJobDesc = Boolean(jobDescription && jobDescription.trim().length > 10);
 
-            // Only use skills that were actually detected in the resume — never
-            // invent qualifications the candidate did not provide.
-            const detectedSkills = (feedback.keywords?.matching || []).slice(0, 4);
-            const signals = extractProfileSignals(resumeText);
-            const hasJobDesc = Boolean(jobDescription && jobDescription.trim().length > 10);
+    if (isSpanish) {
+        const skillsLine =
+            detectedSkills.length > 0
+                ? `Entre las competencias detectadas en mi perfil destacan: ${detectedSkills.join(", ")}.`
+                : "Cuento con una trayectoria profesional alineada con los requerimientos de la posición.";
 
-            if (isSpanish) {
-                const skillsLine = detectedSkills.length > 0
-                    ? `Entre las competencias detectadas en mi perfil destacan: ${detectedSkills.join(", ")}.`
-                    : "Cuento con una trayectoria profesional alineada con los requerimientos de la posición.";
+        const jobAlignment = hasJobDesc
+            ? detectedSkills.length > 0
+                ? `Al analizar la descripción del puesto y sus prioridades clave, considero que mi dominio de ${detectedSkills.join(", ")} encaja directamente con los objetivos de ${company}.`
+                : `He revisado detalladamente los desafíos descritos para la vacante y confío en mi capacidad para aportar soluciones efectivas a su equipo.`
+            : "Estoy convencido/a de que mi experiencia puede aportar valor a su equipo, y me motiva la oportunidad de aplicar mis conocimientos en un entorno orientado a resultados.";
 
-                const jobAlignment = hasJobDesc
-                    ? (detectedSkills.length > 0
-                        ? `Al analizar la descripción del puesto y sus prioridades clave, considero que mi dominio de ${detectedSkills.join(", ")} encaja directamente con los objetivos de ${company}.`
-                        : `He revisado detalladamente los desafíos descritos para la vacante y confío en mi capacidad para aportar soluciones efectivas a su equipo.`)
-                    : "Estoy convencido/a de que mi experiencia puede aportar valor a su equipo, y me motiva la oportunidad de aplicar mis conocimientos en un entorno orientado a resultados.";
+        const experienceLine = signals.yearsExperience
+            ? `Aporto ${signals.yearsExperience} años de experiencia profesional en el área.`
+            : "";
+        const impactLine =
+            signals.quantifiedAchievements > 0
+                ? " He orientado mi trabajo a generar resultados medibles y a asumir responsabilidades de forma proactiva."
+                : " He asumido responsabilidades de forma proactiva y he colaborado con equipos multidisciplinarios para alcanzar objetivos comunes.";
 
-                const experienceLine = signals.yearsExperience
-                    ? `Aporto ${signals.yearsExperience} años de experiencia profesional en el área.`
-                    : "";
-                const impactLine = signals.quantifiedAchievements > 0
-                    ? " He orientado mi trabajo a generar resultados medibles y a asumir responsabilidades de forma proactiva."
-                    : " He asumido responsabilidades de forma proactiva y he colaborado con equipos multidisciplinarios para alcanzar objetivos comunes.";
+        return `${date}
 
-                setLetterText(
-`${date}
-
-Estimado/a ${t.coverLetter.recipient},
+Estimado/a ${recipient},
 
 Me dirijo a ustedes para presentar mi candidatura al puesto de ${role} en ${company}.
 
@@ -81,30 +84,31 @@ Quedo a su disposición para ampliar cualquier información en una entrevista.
 Atentamente,
 
 [Tu Nombre y Apellido]
-[Teléfono] | [Correo Electrónico] | [LinkedIn / Portafolio]`
-                );
-            } else {
-                const skillsLine = detectedSkills.length > 0
-                    ? `Key skills reflected in my background include: ${detectedSkills.join(", ")}.`
-                    : "My professional background is closely aligned with the requirements of the role.";
+[Teléfono] | [Correo Electrónico] | [LinkedIn / Portafolio]`;
+    }
 
-                const jobAlignment = hasJobDesc
-                    ? (detectedSkills.length > 0
-                        ? `After carefully reviewing the requirements and priorities for this role, I believe my experience with ${detectedSkills.join(", ")} provides a strong foundation to deliver value quickly at ${company}.`
-                        : `Having reviewed the key responsibilities described in the posting, I am confident in my ability to address your team's challenges effectively.`)
-                    : "I am confident that my experience would allow me to contribute meaningfully to your team, and I am excited by the opportunity to apply my skills in a results-driven environment.";
+    const skillsLine =
+        detectedSkills.length > 0
+            ? `Key skills reflected in my background include: ${detectedSkills.join(", ")}.`
+            : "My professional background is closely aligned with the requirements of the role.";
 
-                const experienceLine = signals.yearsExperience
-                    ? `I bring ${signals.yearsExperience} years of professional experience in the field.`
-                    : "";
-                const impactLine = signals.quantifiedAchievements > 0
-                    ? " I have focused my work on delivering measurable results and taking proactive ownership."
-                    : " I have taken proactive ownership of my work and collaborated with cross-functional teams to achieve shared goals.";
+    const jobAlignment = hasJobDesc
+        ? detectedSkills.length > 0
+            ? `After carefully reviewing the requirements and priorities for this role, I believe my experience with ${detectedSkills.join(", ")} provides a strong foundation to deliver value quickly at ${company}.`
+            : `Having reviewed the key responsibilities described in the posting, I am confident in my ability to address your team's challenges effectively.`
+        : "I am confident that my experience would allow me to contribute meaningfully to your team, and I am excited by the opportunity to apply my skills in a results-driven environment.";
 
-                setLetterText(
-`${date}
+    const experienceLine = signals.yearsExperience
+        ? `I bring ${signals.yearsExperience} years of professional experience in the field.`
+        : "";
+    const impactLine =
+        signals.quantifiedAchievements > 0
+            ? " I have focused my work on delivering measurable results and taking proactive ownership."
+            : " I have taken proactive ownership of my work and collaborated with cross-functional teams to achieve shared goals.";
 
-Dear ${t.coverLetter.recipient},
+    return `${date}
+
+Dear ${recipient},
 
 I am writing to express my interest in the ${role} position at ${company}.
 
@@ -117,11 +121,44 @@ Thank you for your time and consideration. I look forward to discussing how my b
 Sincerely,
 
 [Your Full Name]
-[Phone Number] | [Email Address] | [LinkedIn / Portfolio URL]`
-                );
-            }
-        }
-    }, [isOpen, companyName, jobTitle, jobDescription, resumeText, language, feedback, t]);
+[Phone Number] | [Email Address] | [LinkedIn / Portfolio URL]`;
+};
+
+const CoverLetterModal: React.FC<CoverLetterModalProps> = ({
+    isOpen,
+    onClose,
+    companyName,
+    jobTitle,
+    jobDescription = "",
+    resumeText = "",
+    feedback,
+}) => {
+    const { t, language } = useI18nStore();
+    // The modal is mounted only while open, so the draft is generated once on
+    // mount instead of being pushed into state from an effect.
+    const [letterText, setLetterText] = useState(() =>
+        generateCoverLetter({
+            language,
+            companyName,
+            jobTitle,
+            jobDescription,
+            resumeText,
+            feedback,
+            recipient: t.coverLetter.recipient,
+        }),
+    );
+    const [copied, setCopied] = useState(false);
+    const [copyError, setCopyError] = useState(false);
+    const dialogRef = useDialog(isOpen, onClose);
+    const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const copyErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+            if (copyErrorTimerRef.current) clearTimeout(copyErrorTimerRef.current);
+        };
+    }, []);
 
     if (!isOpen) return null;
 
@@ -130,11 +167,13 @@ Sincerely,
             await navigator.clipboard.writeText(letterText);
             setCopied(true);
             setCopyError(false);
-            setTimeout(() => setCopied(false), 2000);
+            if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+            copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
         } catch (err) {
             console.error("Failed to copy text:", err);
             setCopyError(true);
-            setTimeout(() => setCopyError(false), 3000);
+            if (copyErrorTimerRef.current) clearTimeout(copyErrorTimerRef.current);
+            copyErrorTimerRef.current = setTimeout(() => setCopyError(false), 3000);
         }
     };
 
@@ -144,7 +183,9 @@ Sincerely,
         const a = document.createElement("a");
         a.href = url;
         const prefix = language === "es" ? "Carta_Presentacion" : "Cover_Letter";
+        // Strip characters that are illegal in file names, including control codes.
         const sanitized = (companyName || "")
+            // eslint-disable-next-line no-control-regex
             .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
             .replace(/\s+/g, "_")
             .slice(0, 80);
@@ -174,11 +215,17 @@ Sincerely,
                 {/* Header */}
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
                     <div>
-                        <h3 id="cover-letter-title" className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <h3
+                            id="cover-letter-title"
+                            className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2"
+                        >
                             <span>✉️</span>
                             <span>{t.coverLetter.modalTitle}</span>
                         </h3>
-                        <p id="cover-letter-subtitle" className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        <p
+                            id="cover-letter-subtitle"
+                            className="text-xs text-slate-500 dark:text-slate-400 mt-0.5"
+                        >
                             {t.coverLetter.subtitle}
                         </p>
                     </div>
@@ -189,8 +236,18 @@ Sincerely,
                         title={t.coverLetter.close}
                         className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                            />
                         </svg>
                     </button>
                 </div>

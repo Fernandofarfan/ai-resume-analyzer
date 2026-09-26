@@ -38,7 +38,8 @@ class MockElement {
     querySelectorAll(selector: string): MockElement[] {
         const results: MockElement[] = [];
         const matches = (el: MockElement) => {
-            if (selector.includes("data-autofocus") && el.hasAttribute("data-autofocus")) return true;
+            if (selector.includes("data-autofocus") && el.hasAttribute("data-autofocus"))
+                return true;
             if (selector.includes("button") && el.tagName === "BUTTON") return true;
             if (selector.includes("input") && el.tagName === "INPUT") return true;
             return false;

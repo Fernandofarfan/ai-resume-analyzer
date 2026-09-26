@@ -7,40 +7,222 @@ import type { Feedback, BulletRewrite, Confidence } from "~/domain/feedback";
 // Numeric metric extraction covering common formats: percentages (+35%, 20–30%),
 // scaled values (1.5M, 50k, 3x), currencies (€50k, USD 100,000) and
 // unit-qualified counts (100 clientes, 5 años).
-const METRIC_REGEX = /(?:\+?\d+(?:[.,]\d+)?\s*%|\d+(?:[.,]\d+)?\s*(?:k|m)\b|(?:usd|eur|€|\$)\s*\d+(?:[.,]\d+)*|\d+\s*(?:años|anos|years|usuarios|users|clientes|clients|ventas|sales|horas|hours|proyectos|projects)\b|\d+\s*x\b|\d+\s*[-–]\s*\d+\s*%)/gi;
+const METRIC_REGEX =
+    /(?:\+?\d+(?:[.,]\d+)?\s*%|\d+(?:[.,]\d+)?\s*(?:k|m)\b|(?:usd|eur|€|\$)\s*\d+(?:[.,]\d+)*|\d+\s*(?:años|anos|years|usuarios|users|clientes|clients|ventas|sales|horas|hours|proyectos|projects)\b|\d+\s*x\b|\d+\s*[-–]\s*\d+\s*%)/gi;
 
 // ---------------------------------------------------------------------------
 // Text normalization & keyword utilities
 // ---------------------------------------------------------------------------
 
 const STOPWORDS = new Set([
-    "para", "como", "este", "esta", "estos", "estas", "sobre", "entre", "hacia", "hasta", "desde",
-    "with", "from", "that", "this", "these", "those", "have", "been", "will", "would", "should",
-    "could", "about", "above", "across", "after", "again", "against", "along", "also", "your",
-    "their", "there", "where", "which", "while", "when", "then", "them", "some", "such", "than",
-    "each", "every", "more", "most", "other", "into", "only", "well", "must", "work", "team",
-    "anos", "años", "years", "experiencia", "experience", "puesto", "role", "position", "ability",
-    "responsable", "responsibilities", "requisitos", "requirements", "conocimientos", "habilidades",
-    "profesional", "professional", "trabajo", "job", "empresa", "company", "candidato", "candidate",
-    "curriculum", "currículum", "resume", "perfil", "profile", "titulo", "título", "title",
-    "descripcion", "descripción", "description", "laboral", "empleo", "oferta", "vacancy",
-    "and", "the", "you", "our", "for", "are", "its", "can", "all", "not", "one", "two",
-    "per", "los", "las", "del", "una", "un", "con", "por", "para", "sin", "más", "mas",
+    "para",
+    "como",
+    "este",
+    "esta",
+    "estos",
+    "estas",
+    "sobre",
+    "entre",
+    "hacia",
+    "hasta",
+    "desde",
+    "with",
+    "from",
+    "that",
+    "this",
+    "these",
+    "those",
+    "have",
+    "been",
+    "will",
+    "would",
+    "should",
+    "could",
+    "about",
+    "above",
+    "across",
+    "after",
+    "again",
+    "against",
+    "along",
+    "also",
+    "your",
+    "their",
+    "there",
+    "where",
+    "which",
+    "while",
+    "when",
+    "then",
+    "them",
+    "some",
+    "such",
+    "than",
+    "each",
+    "every",
+    "more",
+    "most",
+    "other",
+    "into",
+    "only",
+    "well",
+    "must",
+    "work",
+    "team",
+    "anos",
+    "años",
+    "years",
+    "experiencia",
+    "experience",
+    "puesto",
+    "role",
+    "position",
+    "ability",
+    "responsable",
+    "responsibilities",
+    "requisitos",
+    "requirements",
+    "conocimientos",
+    "habilidades",
+    "profesional",
+    "professional",
+    "trabajo",
+    "job",
+    "empresa",
+    "company",
+    "candidato",
+    "candidate",
+    "curriculum",
+    "currículum",
+    "resume",
+    "perfil",
+    "profile",
+    "titulo",
+    "título",
+    "title",
+    "descripcion",
+    "descripción",
+    "description",
+    "laboral",
+    "empleo",
+    "oferta",
+    "vacancy",
+    "and",
+    "the",
+    "you",
+    "our",
+    "for",
+    "are",
+    "its",
+    "can",
+    "all",
+    "not",
+    "one",
+    "two",
+    "per",
+    "los",
+    "las",
+    "del",
+    "una",
+    "un",
+    "con",
+    "por",
+    "para",
+    "sin",
+    "más",
+    "mas",
 ]);
 
 // Well-known technical terms get a relevance boost during keyword ranking so
 // that generic frequent words don't dominate the extraction.
 const TECH_TERMS = new Set([
-    "javascript", "typescript", "python", "java", "kotlin", "swift", "go", "golang", "rust",
-    "php", "ruby", "c++", "c#", "c", "sql", "nosql", "html", "css", "sass", "scss",
-    "react", "angular", "vue", "svelte", "next.js", "nextjs", "node", "node.js", "nodejs",
-    "express", "django", "flask", "spring", "rails", "laravel", "graphql", "rest", "restful",
-    "aws", "azure", "gcp", "docker", "kubernetes", "k8s", "terraform", "ci/cd", "jenkins",
-    "git", "github", "gitlab", "redis", "postgresql", "postgres", "mysql", "mongodb",
-    "elasticsearch", "kafka", "rabbitmq", "spark", "hadoop", "airflow", "dbt", "tableau",
-    "powerbi", "excel", "figma", "linux", "unix", "bash", "shell", "scrum", "agile", "jira",
-    "machine learning", "deep learning", "nlp", "computer vision", "data science", "pandas",
-    "numpy", "tensorflow", "pytorch", "sklearn", "scikit-learn", "llm", "openai", "langchain",
+    "javascript",
+    "typescript",
+    "python",
+    "java",
+    "kotlin",
+    "swift",
+    "go",
+    "golang",
+    "rust",
+    "php",
+    "ruby",
+    "c++",
+    "c#",
+    "c",
+    "sql",
+    "nosql",
+    "html",
+    "css",
+    "sass",
+    "scss",
+    "react",
+    "angular",
+    "vue",
+    "svelte",
+    "next.js",
+    "nextjs",
+    "node",
+    "node.js",
+    "nodejs",
+    "express",
+    "django",
+    "flask",
+    "spring",
+    "rails",
+    "laravel",
+    "graphql",
+    "rest",
+    "restful",
+    "aws",
+    "azure",
+    "gcp",
+    "docker",
+    "kubernetes",
+    "k8s",
+    "terraform",
+    "ci/cd",
+    "jenkins",
+    "git",
+    "github",
+    "gitlab",
+    "redis",
+    "postgresql",
+    "postgres",
+    "mysql",
+    "mongodb",
+    "elasticsearch",
+    "kafka",
+    "rabbitmq",
+    "spark",
+    "hadoop",
+    "airflow",
+    "dbt",
+    "tableau",
+    "powerbi",
+    "excel",
+    "figma",
+    "linux",
+    "unix",
+    "bash",
+    "shell",
+    "scrum",
+    "agile",
+    "jira",
+    "machine learning",
+    "deep learning",
+    "nlp",
+    "computer vision",
+    "data science",
+    "pandas",
+    "numpy",
+    "tensorflow",
+    "pytorch",
+    "sklearn",
+    "scikit-learn",
+    "llm",
+    "openai",
+    "langchain",
 ]);
 
 // Normalized skill catalog: every alias maps to a single canonical term so that
@@ -94,7 +276,10 @@ for (const entry of SKILL_CATALOG) {
 }
 
 export const normalizeText = (text: string): string =>
-    text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    text
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
 
 const canonicalize = (token: string): string => {
     const lower = token.toLowerCase().trim();
@@ -190,7 +375,10 @@ export const extractSignificantKeywords = (text: string, limit = 15): string[] =
 
     const ranked = [
         ...Object.keys(counts).map((term) => ({ term, score: score(term, counts[term]) })),
-        ...Object.keys(bigramCounts).map((term) => ({ term, score: score(term, bigramCounts[term]) })),
+        ...Object.keys(bigramCounts).map((term) => ({
+            term,
+            score: score(term, bigramCounts[term]),
+        })),
     ];
 
     return ranked
@@ -250,7 +438,7 @@ export const extractProfileSignals = (rawText: string): ProfileSignals => {
 
 export const generateResumeFeedback = (
     resumeData: ResumeInput,
-    language: "es" | "en" = "es"
+    language: "es" | "en" = "es",
 ): Feedback => {
     const isSpanish = language === "es";
 
@@ -266,7 +454,7 @@ export const generateResumeFeedback = (
     const wordCount = resumeText ? resumeText.split(/\s+/).filter(Boolean).length : 0;
 
     // --- Keyword Gap Analysis (whole-word, accent/plural normalized) ---
-    const hasTarget = (jobDesc || (resumeData.jobTitle?.trim() || "")).length > 0;
+    const hasTarget = (jobDesc || resumeData.jobTitle?.trim() || "").length > 0;
     const targetKeywords = hasTarget
         ? extractSignificantKeywords(`${jobDesc ? jobDesc : jobTitle}`)
         : [];
@@ -283,19 +471,31 @@ export const generateResumeFeedback = (
     });
 
     // null => not evaluable (no job description/title to compare against).
-    const keywordMatchScore: number | null = targetKeywords.length > 0
-        ? Math.round((matchingKeywords.length / targetKeywords.length) * 100)
-        : null;
+    const keywordMatchScore: number | null =
+        targetKeywords.length > 0
+            ? Math.round((matchingKeywords.length / targetKeywords.length) * 100)
+            : null;
 
     // --- Evidence-Based Heuristic Scoring ---
     const isVeryShort = wordCount < 40;
 
     // 1. Structure & Sections
-    const hasContact = /@|linkedin|github|telefono|teléfono|phone|email|correo|\+?\d{8,}/i.test(resumeText);
-    const hasExperience = /experiencia|experience|trayectoria|work history|historial laboral|empleo/i.test(textLower);
-    const hasEducation = /educaci[oó]n|education|universidad|university|licenciatura|grado|bachelor|master|m[aá]ster/i.test(textLower);
-    const hasSkills = /habilidades|skills|aptitudes|conocimientos|technologies|tecnolog[ií]as|herramientas|stack/i.test(textLower);
-    const hasSummary = /resumen|summary|perfil|profile|sobre m[ií]|about me|objetivo/i.test(textLower);
+    const hasContact = /@|linkedin|github|telefono|teléfono|phone|email|correo|\+?\d{8,}/i.test(
+        resumeText,
+    );
+    const hasExperience =
+        /experiencia|experience|trayectoria|work history|historial laboral|empleo/i.test(textLower);
+    const hasEducation =
+        /educaci[oó]n|education|universidad|university|licenciatura|grado|bachelor|master|m[aá]ster/i.test(
+            textLower,
+        );
+    const hasSkills =
+        /habilidades|skills|aptitudes|conocimientos|technologies|tecnolog[ií]as|herramientas|stack/i.test(
+            textLower,
+        );
+    const hasSummary = /resumen|summary|perfil|profile|sobre m[ií]|about me|objetivo/i.test(
+        textLower,
+    );
 
     let structureScore: number;
     if (isVeryShort) {
@@ -332,10 +532,12 @@ export const generateResumeFeedback = (
     contentScore = Math.min(96, Math.max(10, contentScore));
 
     // 3. Tone & Action Verbs (bilingual regex ensures fairness regardless of UI language vs document language)
-    const actionVerbsBilingual = /lider[eé]|desarroll[eé]|dise[ñn][eé]|implement[eé]|optimiz[eé]|coordin[eé]|cre[eé]|aument[eé]|reduj[eé]|gestion[eé]|arquitectur|led|developed|designed|implemented|optimized|coordinated|created|increased|reduced|managed|engineered|built|architected|spearheaded/gi;
+    const actionVerbsBilingual =
+        /lider[eé]|desarroll[eé]|dise[ñn][eé]|implement[eé]|optimiz[eé]|coordin[eé]|cre[eé]|aument[eé]|reduj[eé]|gestion[eé]|arquitectur|led|developed|designed|implemented|optimized|coordinated|created|increased|reduced|managed|engineered|built|architected|spearheaded/gi;
     const actionVerbCount = (resumeText.match(actionVerbsBilingual) || []).length;
 
-    const passivePhrases = /responsable de|ayud[eé] a|particip[eé] en|assisted with|helped to|responsible for/gi;
+    const passivePhrases =
+        /responsable de|ayud[eé] a|particip[eé] en|assisted with|helped to|responsible for/gi;
     const passiveCount = (resumeText.match(passivePhrases) || []).length;
 
     let toneScore: number;
@@ -355,7 +557,7 @@ export const generateResumeFeedback = (
     if (isVeryShort) {
         skillsScore = 15;
     } else if (keywordMatchScore !== null) {
-        skillsScore = Math.round((keywordMatchScore * 0.7) + (hasSkills ? 30 : 0));
+        skillsScore = Math.round(keywordMatchScore * 0.7 + (hasSkills ? 30 : 0));
     } else {
         // Without target job posting, reflect detected skill presence honestly without false match inflation
         skillsScore = hasSkills ? 55 : 30;
@@ -363,8 +565,16 @@ export const generateResumeFeedback = (
     skillsScore = Math.min(98, Math.max(15, skillsScore));
 
     // ATS Overall Score
-    const atsScore = Math.round((structureScore * 0.28) + (skillsScore * 0.32) + (contentScore * 0.25) + (toneScore * 0.15));
-    let overall = Math.round((atsScore * 0.35) + (contentScore * 0.25) + (structureScore * 0.2) + (toneScore * 0.1) + (skillsScore * 0.1));
+    const atsScore = Math.round(
+        structureScore * 0.28 + skillsScore * 0.32 + contentScore * 0.25 + toneScore * 0.15,
+    );
+    let overall = Math.round(
+        atsScore * 0.35 +
+            contentScore * 0.25 +
+            structureScore * 0.2 +
+            toneScore * 0.1 +
+            skillsScore * 0.1,
+    );
     if (isVeryShort) {
         overall = Math.min(20, overall);
     }
@@ -373,13 +583,15 @@ export const generateResumeFeedback = (
     // the user supplies their own real numbers instead of fabricated figures.
     const bulletRewrites: BulletRewrite[] = [
         {
-            originalTip: isSpanish ? "Cuantificar logros con métricas" : "Quantify achievements with metrics",
+            originalTip: isSpanish
+                ? "Cuantificar logros con métricas"
+                : "Quantify achievements with metrics",
             suggestedRewrite: isSpanish
                 ? `Optimicé [proceso/área] para ${jobTitle}, logrando una mejora del [X%] en [métrica] mediante [acción/tecnología].`
                 : `Improved [process/area] for ${jobTitle}, achieving a [X%] gain in [metric] by [action/technology].`,
             reasoning: isSpanish
                 ? "Aplica la fórmula Google: Logro específico + Impacto numérico + Método de implementación. Sustituye [X%] y [métrica] por tus datos reales."
-                : "Applies Google XYZ format: Specific achievement + Quantified metric + Mechanism. Replace [X%] and [metric] with your own numbers."
+                : "Applies Google XYZ format: Specific achievement + Quantified metric + Mechanism. Replace [X%] and [metric] with your own numbers.",
         },
         {
             originalTip: isSpanish ? "Evitar lenguaje pasivo" : "Eliminate passive phrasing",
@@ -388,8 +600,8 @@ export const generateResumeFeedback = (
                 : `Spearheaded [project/initiative], reducing [metric] by [X%].`,
             reasoning: isSpanish
                 ? "Reemplaza 'responsable de' por un verbo de acción directo ('Lideré') y asocia un resultado medible real."
-                : "Replaces passive duty descriptions with a high-impact proactive verb tied to a real result."
-        }
+                : "Replaces passive duty descriptions with a high-impact proactive verb tied to a real result.",
+        },
     ];
 
     const base: Feedback = {
@@ -432,53 +644,188 @@ export const generateResumeFeedback = (
 
     base.ATS.tips = [
         hasExperience && hasEducation
-            ? { type: "good", tip: isSpanish ? "Encabezados estándar y estructura compatible con los analizadores ATS más utilizados." : "Standard section headers ensuring high parseability across ATS platforms." }
-            : { type: "improve", tip: isSpanish ? "Asegúrate de incluir secciones claramente tituladas: 'Experiencia Laboral', 'Educación' y 'Habilidades'." : "Ensure clearly labeled sections: 'Work Experience', 'Education', and 'Skills'." },
+            ? {
+                  type: "good",
+                  tip: isSpanish
+                      ? "Encabezados estándar y estructura compatible con los analizadores ATS más utilizados."
+                      : "Standard section headers ensuring high parseability across ATS platforms.",
+              }
+            : {
+                  type: "improve",
+                  tip: isSpanish
+                      ? "Asegúrate de incluir secciones claramente tituladas: 'Experiencia Laboral', 'Educación' y 'Habilidades'."
+                      : "Ensure clearly labeled sections: 'Work Experience', 'Education', and 'Skills'.",
+              },
         matchingKeywords.length >= 3
-            ? { type: "good", tip: isSpanish ? `Buena densidad de palabras clave alineadas con el puesto de ${jobTitle}.` : `Solid keyword alignment matching the role of ${jobTitle}.` }
-            : { type: "improve", tip: isSpanish ? `Incorpora más términos y requisitos específicos del rol de ${jobTitle} a lo largo de tu CV.` : `Incorporate more target keywords and domain skills corresponding to ${jobTitle}.` },
+            ? {
+                  type: "good",
+                  tip: isSpanish
+                      ? `Buena densidad de palabras clave alineadas con el puesto de ${jobTitle}.`
+                      : `Solid keyword alignment matching the role of ${jobTitle}.`,
+              }
+            : {
+                  type: "improve",
+                  tip: isSpanish
+                      ? `Incorpora más términos y requisitos específicos del rol de ${jobTitle} a lo largo de tu CV.`
+                      : `Incorporate more target keywords and domain skills corresponding to ${jobTitle}.`,
+              },
         metricCount >= 2
-            ? { type: "good", tip: isSpanish ? "Presencia de logros cuantificados mediante métricas y cifras concretas." : "Strong presence of quantified achievements and measurable metrics." }
-            : { type: "improve", tip: isSpanish ? "Cuantifica tus responsabilidades con resultados medibles (% de eficiencia, tiempo o costos ahorrados)." : "Quantify your achievements with concrete metrics (% improvements, time/cost savings)." },
+            ? {
+                  type: "good",
+                  tip: isSpanish
+                      ? "Presencia de logros cuantificados mediante métricas y cifras concretas."
+                      : "Strong presence of quantified achievements and measurable metrics.",
+              }
+            : {
+                  type: "improve",
+                  tip: isSpanish
+                      ? "Cuantifica tus responsabilidades con resultados medibles (% de eficiencia, tiempo o costos ahorrados)."
+                      : "Quantify your achievements with concrete metrics (% improvements, time/cost savings).",
+              },
         hasContact
-            ? { type: "good", tip: isSpanish ? "Datos de contacto identificables para los reclutadores." : "Contact information easily identifiable by hiring managers and parsers." }
-            : { type: "improve", tip: isSpanish ? "Verifica que tu correo electrónico, teléfono y enlace a LinkedIn sean fácilmente legibles." : "Make sure your email, phone number, and LinkedIn URL are prominent and clean." },
+            ? {
+                  type: "good",
+                  tip: isSpanish
+                      ? "Datos de contacto identificables para los reclutadores."
+                      : "Contact information easily identifiable by hiring managers and parsers.",
+              }
+            : {
+                  type: "improve",
+                  tip: isSpanish
+                      ? "Verifica que tu correo electrónico, teléfono y enlace a LinkedIn sean fácilmente legibles."
+                      : "Make sure your email, phone number, and LinkedIn URL are prominent and clean.",
+              },
     ];
 
     base.toneAndStyle.tips = [
         actionVerbCount >= 2
-            ? { type: "good", tip: isSpanish ? "Verbos de Acción Efectivos" : "Strong Action Verbs", explanation: isSpanish ? "Tus viñetas utilizan verbos contundentes que transmiten proactividad y autonomía." : "Bullet points lead with powerful action verbs conveying autonomy and leadership." }
-            : { type: "improve", tip: isSpanish ? "Utilizar Verbos de Acción Fuertes" : "Leverage Action Verbs", explanation: isSpanish ? "Comienza cada viñeta con verbos como 'Lideré', 'Desarrollé', 'Implementé' u 'Optimicé'." : "Start bullet points with definitive verbs like 'Spearheaded', 'Engineered', 'Orchestrated', or 'Optimized'." },
+            ? {
+                  type: "good",
+                  tip: isSpanish ? "Verbos de Acción Efectivos" : "Strong Action Verbs",
+                  explanation: isSpanish
+                      ? "Tus viñetas utilizan verbos contundentes que transmiten proactividad y autonomía."
+                      : "Bullet points lead with powerful action verbs conveying autonomy and leadership.",
+              }
+            : {
+                  type: "improve",
+                  tip: isSpanish ? "Utilizar Verbos de Acción Fuertes" : "Leverage Action Verbs",
+                  explanation: isSpanish
+                      ? "Comienza cada viñeta con verbos como 'Lideré', 'Desarrollé', 'Implementé' u 'Optimicé'."
+                      : "Start bullet points with definitive verbs like 'Spearheaded', 'Engineered', 'Orchestrated', or 'Optimized'.",
+              },
         passiveCount > 0
-            ? { type: "improve", tip: isSpanish ? "Evitar Lenguaje Pasivo" : "Eliminate Passive Phrasing", explanation: isSpanish ? "Reemplaza fórmulas como 'Responsable de' o 'Ayudé a' por acciones directas y asertivas." : "Replace passive phrases like 'Responsible for' or 'Helped with' with active, direct contribution statements." }
-            : { type: "good", tip: isSpanish ? "Tono Profesional y Directo" : "Assertive Tone", explanation: isSpanish ? "El lenguaje utilizado es asertivo y centrado en la ejecución." : "Resume maintains a direct, professional and achievement-oriented tone." },
+            ? {
+                  type: "improve",
+                  tip: isSpanish ? "Evitar Lenguaje Pasivo" : "Eliminate Passive Phrasing",
+                  explanation: isSpanish
+                      ? "Reemplaza fórmulas como 'Responsable de' o 'Ayudé a' por acciones directas y asertivas."
+                      : "Replace passive phrases like 'Responsible for' or 'Helped with' with active, direct contribution statements.",
+              }
+            : {
+                  type: "good",
+                  tip: isSpanish ? "Tono Profesional y Directo" : "Assertive Tone",
+                  explanation: isSpanish
+                      ? "El lenguaje utilizado es asertivo y centrado en la ejecución."
+                      : "Resume maintains a direct, professional and achievement-oriented tone.",
+              },
     ];
 
     base.content.tips = [
         metricCount >= 2
-            ? { type: "good", tip: isSpanish ? "Impacto Cuantificado" : "Quantified Impact", explanation: isSpanish ? "Respaldaste tus responsabilidades con métricas numéricas concretas." : "You backed up your responsibilities with tangible numbers and deliverables." }
-            : { type: "improve", tip: isSpanish ? "Añadir Métricas y Resultados" : "Add Quantifiable Metrics", explanation: isSpanish ? "Asocia cada función principal a un indicador de éxito (ej. porcentaje de mejora, reducción de tiempos)." : "Connect each core responsibility to a tangible business or technical outcome." },
+            ? {
+                  type: "good",
+                  tip: isSpanish ? "Impacto Cuantificado" : "Quantified Impact",
+                  explanation: isSpanish
+                      ? "Respaldaste tus responsabilidades con métricas numéricas concretas."
+                      : "You backed up your responsibilities with tangible numbers and deliverables.",
+              }
+            : {
+                  type: "improve",
+                  tip: isSpanish ? "Añadir Métricas y Resultados" : "Add Quantifiable Metrics",
+                  explanation: isSpanish
+                      ? "Asocia cada función principal a un indicador de éxito (ej. porcentaje de mejora, reducción de tiempos)."
+                      : "Connect each core responsibility to a tangible business or technical outcome.",
+              },
         wordCount >= 200
-            ? { type: "good", tip: isSpanish ? "Profundidad de Contenido Adecuada" : "Optimal Detail Depth", explanation: isSpanish ? "El nivel de detalle describe con claridad tus responsabilidades profesionales." : "The depth of explanations effectively captures your scope of work." }
-            : { type: "improve", tip: isSpanish ? "Ampliar Detalle de Experiencias" : "Expand Experience Details", explanation: isSpanish ? "Tu CV es breve. Explica con mayor detalle los proyectos y tecnologías que dominas." : "Your resume content is brief. Provide more details on technical projects and contributions." },
+            ? {
+                  type: "good",
+                  tip: isSpanish ? "Profundidad de Contenido Adecuada" : "Optimal Detail Depth",
+                  explanation: isSpanish
+                      ? "El nivel de detalle describe con claridad tus responsabilidades profesionales."
+                      : "The depth of explanations effectively captures your scope of work.",
+              }
+            : {
+                  type: "improve",
+                  tip: isSpanish ? "Ampliar Detalle de Experiencias" : "Expand Experience Details",
+                  explanation: isSpanish
+                      ? "Tu CV es breve. Explica con mayor detalle los proyectos y tecnologías que dominas."
+                      : "Your resume content is brief. Provide more details on technical projects and contributions.",
+              },
     ];
 
     base.structure.tips = [
         hasExperience && hasSkills
-            ? { type: "good", tip: isSpanish ? "Organización Modular Clara" : "Clean Modular Layout", explanation: isSpanish ? "Las secciones principales están claramente diferenciadas para una lectura ágil." : "Clear separation between Experience, Education, and Technical Competencies." }
-            : { type: "improve", tip: isSpanish ? "Completar Secciones Fundamentales" : "Organize Core Sections", explanation: isSpanish ? "Asegúrate de estructurar el CV con: Perfil, Experiencia Laboral, Educación y Habilidades." : "Ensure standard chronological sections: Summary, Experience, Education, and Skills." },
-        { type: "good", tip: isSpanish ? "Estructura y Encabezados Legibles" : "Scannable Standard Headings", explanation: isSpanish ? "Las secciones detectadas facilitan la lectura inmediata y el escaneo automático." : "The detected headings provide immediate scannability and clear section boundaries." },
+            ? {
+                  type: "good",
+                  tip: isSpanish ? "Organización Modular Clara" : "Clean Modular Layout",
+                  explanation: isSpanish
+                      ? "Las secciones principales están claramente diferenciadas para una lectura ágil."
+                      : "Clear separation between Experience, Education, and Technical Competencies.",
+              }
+            : {
+                  type: "improve",
+                  tip: isSpanish ? "Completar Secciones Fundamentales" : "Organize Core Sections",
+                  explanation: isSpanish
+                      ? "Asegúrate de estructurar el CV con: Perfil, Experiencia Laboral, Educación y Habilidades."
+                      : "Ensure standard chronological sections: Summary, Experience, Education, and Skills.",
+              },
+        {
+            type: "good",
+            tip: isSpanish ? "Estructura y Encabezados Legibles" : "Scannable Standard Headings",
+            explanation: isSpanish
+                ? "Las secciones detectadas facilitan la lectura inmediata y el escaneo automático."
+                : "The detected headings provide immediate scannability and clear section boundaries.",
+        },
     ];
 
     base.skills.tips = [
         hasSkills
-            ? { type: "good", tip: isSpanish ? "Sección de Habilidades Presente" : "Dedicated Skills Section", explanation: isSpanish ? "El documento incluye un apartado específico para tus competencias técnicas." : "Document has a clear area highlighting technical competencies." }
-            : { type: "improve", tip: isSpanish ? "Crear Sección de Habilidades" : "Create Categorized Skills Section", explanation: isSpanish ? "Agrega un bloque dedicado a Habilidades Técnicas, Frameworks y Herramientas." : "Group skills into Core Languages, Frameworks, and Tools for faster recruiter evaluation." },
+            ? {
+                  type: "good",
+                  tip: isSpanish ? "Sección de Habilidades Presente" : "Dedicated Skills Section",
+                  explanation: isSpanish
+                      ? "El documento incluye un apartado específico para tus competencias técnicas."
+                      : "Document has a clear area highlighting technical competencies.",
+              }
+            : {
+                  type: "improve",
+                  tip: isSpanish
+                      ? "Crear Sección de Habilidades"
+                      : "Create Categorized Skills Section",
+                  explanation: isSpanish
+                      ? "Agrega un bloque dedicado a Habilidades Técnicas, Frameworks y Herramientas."
+                      : "Group skills into Core Languages, Frameworks, and Tools for faster recruiter evaluation.",
+              },
         matchingKeywords.length >= 3
-            ? { type: "good", tip: isSpanish ? "Coincidencia con la Oferta" : "Job Match Alignment", explanation: isSpanish ? `Detectamos términos clave requeridos por la vacante (${matchingKeywords.slice(0, 4).join(", ")}).` : `Key keywords from the target job were found in your profile (${matchingKeywords.slice(0, 4).join(", ")}).` }
-            : { type: "improve", tip: isSpanish ? "Optimizar Palabras Clave" : "Targeted Industry Keywords", explanation: missingKeywords.length > 0
-                ? (isSpanish ? `Te recomendamos incorporar términos de la oferta como: ${missingKeywords.slice(0, 4).join(", ")}.` : `Consider integrating missing job requirements: ${missingKeywords.slice(0, 4).join(", ")}.`)
-                : (isSpanish ? `Incluye certificaciones y términos tecnológicos estándar para el rol de ${jobTitle}.` : `Ensure specific industry certifications and tools for ${jobTitle} are prominently featured.`) },
+            ? {
+                  type: "good",
+                  tip: isSpanish ? "Coincidencia con la Oferta" : "Job Match Alignment",
+                  explanation: isSpanish
+                      ? `Detectamos términos clave requeridos por la vacante (${matchingKeywords.slice(0, 4).join(", ")}).`
+                      : `Key keywords from the target job were found in your profile (${matchingKeywords.slice(0, 4).join(", ")}).`,
+              }
+            : {
+                  type: "improve",
+                  tip: isSpanish ? "Optimizar Palabras Clave" : "Targeted Industry Keywords",
+                  explanation:
+                      missingKeywords.length > 0
+                          ? isSpanish
+                              ? `Te recomendamos incorporar términos de la oferta como: ${missingKeywords.slice(0, 4).join(", ")}.`
+                              : `Consider integrating missing job requirements: ${missingKeywords.slice(0, 4).join(", ")}.`
+                          : isSpanish
+                            ? `Incluye certificaciones y términos tecnológicos estándar para el rol de ${jobTitle}.`
+                            : `Ensure specific industry certifications and tools for ${jobTitle} are prominently featured.`,
+              },
     ];
 
     return base;
@@ -490,20 +837,35 @@ export const analyzeResumeContent = (instructionMessage: string): Feedback => {
     const isSpanish = /IDIOMA ESPAÑOL|puesto objetivo|currículum/i.test(instructionMessage);
 
     let jobTitle = isSpanish ? "Puesto Profesional" : "Professional Role";
-    const jobTitleMatch = instructionMessage.match(/(?:The job title is|El título del puesto objetivo es):\s*([^\n\r]*)/i);
-    if (jobTitleMatch && jobTitleMatch[1]?.trim() && !jobTitleMatch[1].includes("No especificado") && !jobTitleMatch[1].includes("Not specified")) {
+    const jobTitleMatch = instructionMessage.match(
+        /(?:The job title is|El título del puesto objetivo es):\s*([^\n\r]*)/i,
+    );
+    if (
+        jobTitleMatch &&
+        jobTitleMatch[1]?.trim() &&
+        !jobTitleMatch[1].includes("No especificado") &&
+        !jobTitleMatch[1].includes("Not specified")
+    ) {
         jobTitle = jobTitleMatch[1].trim();
     }
 
     // Capture the full multi-line job description up to the next delimiter,
     // instead of only the first line.
-    const jobDescMatch = instructionMessage.match(/(?:The job description is|La descripción de la oferta laboral es):\s*([\s\S]*?)(?=(?:--- |The extracted resume text|El contenido de texto extraído|$))/i);
-    const jobDescription = jobDescMatch && jobDescMatch[1]?.trim() && !jobDescMatch[1].includes("No especificada") && !jobDescMatch[1].includes("Not specified")
-        ? jobDescMatch[1].trim()
-        : "";
+    const jobDescMatch = instructionMessage.match(
+        /(?:The job description is|La descripción de la oferta laboral es):\s*([\s\S]*?)(?=(?:--- |The extracted resume text|El contenido de texto extraído|$))/i,
+    );
+    const jobDescription =
+        jobDescMatch &&
+        jobDescMatch[1]?.trim() &&
+        !jobDescMatch[1].includes("No especificada") &&
+        !jobDescMatch[1].includes("Not specified")
+            ? jobDescMatch[1].trim()
+            : "";
 
     let rawText = "";
-    const resumeTextMatch = instructionMessage.match(/(?:--- INICIO CONTENIDO CV ---|--- START RESUME CONTENT ---)([\s\S]*?)(?:--- FIN CONTENIDO CV ---|--- END RESUME CONTENT ---)/i);
+    const resumeTextMatch = instructionMessage.match(
+        /(?:--- INICIO CONTENIDO CV ---|--- START RESUME CONTENT ---)([\s\S]*?)(?:--- FIN CONTENIDO CV ---|--- END RESUME CONTENT ---)/i,
+    );
     if (resumeTextMatch && resumeTextMatch[1]) {
         rawText = resumeTextMatch[1].trim();
     }

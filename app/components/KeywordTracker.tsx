@@ -33,13 +33,15 @@ const KeywordTracker: React.FC<KeywordTrackerProps> = ({ keywords }) => {
                             {t.keywords.matchRate}
                         </span>
                         {evaluable ? (
-                            <p className={`text-2xl font-black ${
-                                (matchScore as number) >= 75
-                                    ? "text-emerald-600 dark:text-emerald-400"
-                                    : (matchScore as number) >= 50
-                                    ? "text-amber-600 dark:text-amber-400"
-                                    : "text-rose-600 dark:text-rose-400"
-                            }`}>
+                            <p
+                                className={`text-2xl font-black ${
+                                    (matchScore as number) >= 75
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : (matchScore as number) >= 50
+                                          ? "text-amber-600 dark:text-amber-400"
+                                          : "text-rose-600 dark:text-rose-400"
+                                }`}
+                            >
                                 {matchScore}%
                             </p>
                         ) : (
@@ -59,8 +61,8 @@ const KeywordTracker: React.FC<KeywordTrackerProps> = ({ keywords }) => {
                             (matchScore as number) >= 75
                                 ? "bg-gradient-to-r from-emerald-500 to-teal-400"
                                 : (matchScore as number) >= 50
-                                ? "bg-gradient-to-r from-amber-500 to-yellow-400"
-                                : "bg-gradient-to-r from-rose-500 to-red-400"
+                                  ? "bg-gradient-to-r from-amber-500 to-yellow-400"
+                                  : "bg-gradient-to-r from-rose-500 to-red-400"
                         }`}
                         style={{ width: `${Math.max(5, matchScore as number)}%` }}
                     />
@@ -79,7 +81,9 @@ const KeywordTracker: React.FC<KeywordTrackerProps> = ({ keywords }) => {
                 <div className="space-y-3">
                     <div className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-400">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                        <span>{t.keywords.matchingKeywords} ({matching.length})</span>
+                        <span>
+                            {t.keywords.matchingKeywords} ({matching.length})
+                        </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {matching.length > 0 ? (
@@ -103,7 +107,9 @@ const KeywordTracker: React.FC<KeywordTrackerProps> = ({ keywords }) => {
                 <div className="space-y-3">
                     <div className="flex items-center gap-2 text-sm font-bold text-rose-700 dark:text-rose-400">
                         <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-                        <span>{t.keywords.missingKeywords} ({missing.length})</span>
+                        <span>
+                            {t.keywords.missingKeywords} ({missing.length})
+                        </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {missing.length > 0 ? (

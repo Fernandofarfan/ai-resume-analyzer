@@ -25,8 +25,8 @@ const ATS: React.FC<ATSProps> = ({ score, suggestions }) => {
         score >= 75
             ? t.resume.atsSubGood
             : score >= 50
-                ? t.resume.atsSubStart
-                : t.resume.atsSubImprove;
+              ? t.resume.atsSubStart
+              : t.resume.atsSubImprove;
 
     return (
         <div className={`glass-card p-6 sm:p-8 w-full border ${getScoreBorder()}`}>
@@ -70,9 +70,7 @@ const ATS: React.FC<ATSProps> = ({ score, suggestions }) => {
                             <span className="text-base shrink-0 mt-0.5">
                                 {suggestion.type === "good" ? "✓" : "⚠️"}
                             </span>
-                            <p className="text-sm font-medium leading-normal">
-                                {suggestion.tip}
-                            </p>
+                            <p className="text-sm font-medium leading-normal">{suggestion.tip}</p>
                         </div>
                     ))}
                 </div>

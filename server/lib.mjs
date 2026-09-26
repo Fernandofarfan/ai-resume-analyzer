@@ -134,7 +134,12 @@ export class CircuitBreaker {
 
 // fetch with a hard timeout so a stalled provider can never hold a request open
 // indefinitely, while supporting active cancellation from client disconnection.
-export async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS, callerSignal) {
+export async function fetchWithTimeout(
+    url,
+    options = {},
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    callerSignal,
+) {
     const controller = new AbortController();
     let isTimeout = false;
     const timer = setTimeout(() => {
@@ -181,7 +186,9 @@ const decodeFully = (str) => {
 // directory traversal.
 export const resolveSafePath = (pathname, clientDir) => {
     const decoded = decodeFully(pathname);
-    const normalized = normalize(decoded).replace(/^(\.\.[/\\])+/, "").replace(/^[/\\]+/, "");
+    const normalized = normalize(decoded)
+        .replace(/^(\.\.[/\\])+/, "")
+        .replace(/^[/\\]+/, "");
     const baseDir = resolve(clientDir);
     const candidate = resolve(baseDir, normalized);
     if (!candidate.startsWith(baseDir)) {
@@ -224,8 +231,12 @@ export const isLoopbackOrPrivate = (ip) => {
 export const getClientIp = (req, trustProxy) => {
     const sockIp = req.socket?.remoteAddress || "unknown";
     if (trustProxy) {
-        let isTrusted = false;
-        if (typeof trustProxy === "string" && trustProxy !== "true" && trustProxy.trim().length > 0) {
+        let isTrusted;
+        if (
+            typeof trustProxy === "string" &&
+            trustProxy !== "true" &&
+            trustProxy.trim().length > 0
+        ) {
             const trustedList = trustProxy.split(",").map((s) => s.trim().replace(/^::ffff:/, ""));
             const cleanSock = sockIp.replace(/^::ffff:/, "");
             isTrusted = trustedList.includes(cleanSock);
@@ -236,7 +247,10 @@ export const getClientIp = (req, trustProxy) => {
         if (isTrusted) {
             const forwarded = req.headers["x-forwarded-for"];
             if (typeof forwarded === "string" && forwarded.length > 0) {
-                const rawIp = forwarded.split(",")[0].trim().replace(/^::ffff:/, "");
+                const rawIp = forwarded
+                    .split(",")[0]
+                    .trim()
+                    .replace(/^::ffff:/, "");
                 if (isIP(rawIp) !== 0) {
                     return rawIp;
                 }
@@ -265,10 +279,7 @@ export {
     validateAuthHeader,
 } from "../shared/schema.mjs";
 
-import {
-    normalizeFeedback,
-    validateFeedback,
-} from "../shared/schema.mjs";
+import { normalizeFeedback, validateFeedback } from "../shared/schema.mjs";
 
 export const validateFeedbackShape = (value) => validateFeedback(value);
 
@@ -284,4 +295,3 @@ export const parseAndValidateFeedback = (text) => {
         return null;
     }
 };
-

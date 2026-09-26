@@ -35,7 +35,12 @@ export {
     checkAttachmentsStatus,
 };
 import { kvGet, kvSet, kvDelete, kvList, kvFlushResumeData } from "./storage/kv";
-import { requestRemoteAnalysis, OfflineModeError, ConsentRequiredError, UnauthorizedError } from "./ai/providers";
+import {
+    requestRemoteAnalysis,
+    OfflineModeError,
+    ConsentRequiredError,
+    UnauthorizedError,
+} from "./ai/providers";
 import { analyzeResumeContent } from "./analysis/heuristic";
 import type { FSItem, KVItem } from "~/domain/storage";
 import type { AIResponse } from "~/domain/ai";
@@ -55,7 +60,11 @@ interface AppStore {
         delete: (path: string) => Promise<void>;
     };
     ai: {
-        feedback: (message: string, consent: boolean, signal?: AbortSignal) => Promise<AIResponse | undefined>;
+        feedback: (
+            message: string,
+            consent: boolean,
+            signal?: AbortSignal,
+        ) => Promise<AIResponse | undefined>;
     };
     kv: {
         get: (key: string) => Promise<string | null | undefined>;
@@ -87,8 +96,12 @@ export const useAppStore = create<AppStore>(() => {
     const runAIInference = async (
         message: string,
         consent: boolean,
-        signal?: AbortSignal
-    ): Promise<{ content: string; source: "ai" | "heuristic"; fallbackReason?: "provider-fallback" | "offline-mode" }> => {
+        signal?: AbortSignal,
+    ): Promise<{
+        content: string;
+        source: "ai" | "heuristic";
+        fallbackReason?: "provider-fallback" | "offline-mode";
+    }> => {
         let fallbackReason: "provider-fallback" | "offline-mode" | undefined;
         try {
             const content = await requestRemoteAnalysis(message, consent, signal);
@@ -119,7 +132,7 @@ export const useAppStore = create<AppStore>(() => {
     const feedback = async (
         message: string,
         consent: boolean,
-        signal?: AbortSignal
+        signal?: AbortSignal,
     ): Promise<AIResponse | undefined> => {
         const { content, source, fallbackReason } = await runAIInference(message, consent, signal);
         return {

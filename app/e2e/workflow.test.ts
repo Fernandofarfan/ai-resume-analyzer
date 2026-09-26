@@ -16,7 +16,7 @@ import {
     runStorageGarbageCollector,
 } from "~/lib/store";
 import { buildResumeHeader } from "~/domain/resume";
-import { RESUME_SCHEMA_VERSION } from "~/lib/migrations";
+import { EMPTY_FEEDBACK, RESUME_SCHEMA_VERSION } from "~/lib/migrations";
 import { useI18nStore } from "~/lib/i18n";
 import { useThemeStore } from "~/lib/theme";
 
@@ -32,7 +32,8 @@ describe("E2E User Workflow & State Lifecycle", () => {
         const resumeId = "e2e-resume-uuid-001";
         const jobTitle = "Senior Frontend Architect";
         const companyName = "Acme Corp";
-        const jobDescription = "We are seeking a React and TypeScript engineer with performance optimization experience.";
+        const jobDescription =
+            "We are seeking a React and TypeScript engineer with performance optimization experience.";
         const resumeText = `
 John Doe
 Email: john.doe@example.com | Phone: +1 555-0199 | LinkedIn: linkedin.com/in/johndoe
@@ -62,7 +63,7 @@ JavaScript, TypeScript, React, Next.js, Node.js, AWS, Docker, CI/CD, Git.
             processingStartedAt: Date.now(),
             heartbeatAt: Date.now(),
             updatedAt: Date.now(),
-            feedback: {} as any,
+            feedback: EMPTY_FEEDBACK,
         };
 
         const initRes = await saveResumeEntity(initialEntity);
@@ -73,7 +74,7 @@ JavaScript, TypeScript, React, Next.js, Node.js, AWS, Docker, CI/CD, Git.
         // 2. Perform Heuristic Analysis
         const feedback = generateResumeFeedback(
             { rawText: resumeText, jobTitle, jobDescription },
-            "en"
+            "en",
         );
 
         expect(feedback.overallScore).toBeGreaterThanOrEqual(60);
@@ -83,7 +84,9 @@ JavaScript, TypeScript, React, Next.js, Node.js, AWS, Docker, CI/CD, Git.
         const wordCount = resumeText.split(/\s+/).filter(Boolean).length;
         const confidence = computeConfidence({
             wordCount,
-            targetKeywordCount: (feedback.keywords?.matching.length || 0) + (feedback.keywords?.missing.length || 0),
+            targetKeywordCount:
+                (feedback.keywords?.matching.length || 0) +
+                (feedback.keywords?.missing.length || 0),
             hasJobDescription: true,
             metricCount: 2,
             hasResumeText: true,
@@ -136,10 +139,15 @@ JavaScript, TypeScript, React, Next.js, Node.js, AWS, Docker, CI/CD, Git.
         expect(isEncryptedBackup(encrypted)).toBe(true);
 
         // Decrypt with wrong password fails
-        await expect(decryptBackupData(encrypted, "wrong-passphrase")).rejects.toThrow(InvalidPassphraseError);
+        await expect(decryptBackupData(encrypted, "wrong-passphrase")).rejects.toThrow(
+            InvalidPassphraseError,
+        );
 
         // Decrypt with correct password succeeds
-        const decrypted = (await decryptBackupData(encrypted, passphrase)) as any;
+        const decrypted = (await decryptBackupData(encrypted, passphrase)) as {
+            version: number;
+            resumes: Array<{ entity: { id: string } }>;
+        };
         expect(decrypted.version).toBe(2);
         expect(decrypted.resumes[0].entity.id).toBe(resumeId);
 
@@ -173,7 +181,7 @@ JavaScript, TypeScript, React, Next.js, Node.js, AWS, Docker, CI/CD, Git.
             processingStartedAt: staleTime,
             heartbeatAt: staleTime,
             updatedAt: staleTime,
-            feedback: {} as any,
+            feedback: EMPTY_FEEDBACK,
         });
 
         const beforeGC = await getResumeEntity(staleId);

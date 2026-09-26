@@ -4,37 +4,36 @@ import ResumeCard from "~/components/ResumeCard";
 import {
     useAppStore,
     deleteResumeEntity,
-    estimateStorageQuota,
     exportAllResumeData,
     importBackupData,
-    runStorageGarbageCollector,
-    checkAttachmentsStatus,
     encryptBackupData,
     decryptBackupData,
     isEncryptedBackup,
     InvalidPassphraseError,
 } from "~/lib/store";
 import { Link } from "react-router";
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { useI18nStore } from "~/lib/i18n";
 import { useDialog } from "~/lib/useDialog";
-import { migrateResumeHeader, isUpToDate } from "~/lib/migrations";
-import { subscribeResumesChanged, notifyResumesChanged, withTabLock } from "~/lib/tabsync";
-import type { ResumeHeader } from "~/domain/resume";
-import type { KVItem } from "~/domain/storage";
+import { useResumeList } from "~/lib/hooks/useResumeList";
+import { migrateResumeHeader } from "~/lib/migrations";
+import { notifyResumesChanged, withTabLock } from "~/lib/tabsync";
 
-export function meta({}: Route.MetaArgs) {
+export function meta(_args: Route.MetaArgs) {
     return [
         { title: "CVision AI | Smart ATS Resume Analyzer & Optimizer" },
-        { name: "description", content: "AI-powered resume audit, keyword matching, and ATS score optimization." },
+        {
+            name: "description",
+            content: "AI-powered resume audit, keyword matching, and ATS score optimization.",
+        },
     ];
 }
 
 export default function Home() {
     const { kv, fs } = useAppStore();
     const { t } = useI18nStore();
-    const [resumes, setResumes] = useState<ResumeHeader[]>([]);
-    const [loadingResumes, setLoadingResumes] = useState(false);
+    const { resumes, loadingResumes, storageInfo, loadResumes, commitResumes, resetResumes } =
+        useResumeList();
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [deleteError, setDeleteError] = useState("");
     const [isDeleting, setIsDeleting] = useState(false);
@@ -43,10 +42,19 @@ export default function Home() {
     const [searchQuery, setSearchQuery] = useState("");
     const [scoreFilter, setScoreFilter] = useState<"all" | "high" | "medium" | "low">("all");
 
-    const [storageInfo, setStorageInfo] = useState<{ usageMB: string; quotaMB: string; percentUsed: number } | null>(null);
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
-    const [importFeedback, setImportFeedback] = useState<{ type: "success" | "warning" | "error"; message: string } | null>(null);
+    const [importFeedback, setImportFeedback] = useState<{
+        type: "success" | "warning" | "error";
+        message: string;
+    } | null>(null);
+    const importFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Auto-dismiss the toast, keeping a single pending timer so it is always
+    // cleared on unmount instead of firing against an unmounted component.
+    const clearImportFeedbackLater = useCallback(() => {
+        if (importFeedbackTimerRef.current) clearTimeout(importFeedbackTimerRef.current);
+        importFeedbackTimerRef.current = setTimeout(() => setImportFeedback(null), 6000);
+    }, []);
 
     // Encrypted Backup Modal State
     const [pendingEncryptedBackup, setPendingEncryptedBackup] = useState<unknown | null>(null);
@@ -63,146 +71,12 @@ export default function Home() {
         setShowPassword(false);
     });
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const mountedRef = useRef(true);
-    const loadControllerRef = useRef<AbortController | null>(null);
 
-    // Conservative stale threshold (25 min) to prevent deleting active tabs in the background.
-    const STALE_PROCESSING_MS = 25 * 60 * 1000;
-
-    const refreshStorageEstimate = async () => {
-        const estimate = await estimateStorageQuota();
-        if (mountedRef.current && estimate) {
-            setStorageInfo({
-                usageMB: estimate.usageMB,
-                quotaMB: estimate.quotaMB,
-                percentUsed: estimate.percentUsed,
-            });
-        }
-    };
-
-    const loadResumes = async () => {
-        loadControllerRef.current?.abort();
-        const controller = new AbortController();
-        loadControllerRef.current = controller;
-
-        setLoadingResumes(true);
-        try {
-            const storedResumes = (await kv.list("resume:*", true)) as KVItem[];
-            if (controller.signal.aborted || !mountedRef.current) return;
-
-            const parsedHeaders: ResumeHeader[] = [];
-            const orphans: ResumeHeader[] = [];
-
-            for (const item of storedResumes ?? []) {
-                if (controller.signal.aborted) return;
-                let rawObj: unknown = null;
-                try {
-                    rawObj = JSON.parse(item.value);
-                } catch {
-                    rawObj = null;
-                }
-                const parsed = rawObj !== null ? migrateResumeHeader(rawObj) : null;
-                if (!parsed) continue;
-
-                // Persist the migrated form once, so stale records are upgraded
-                if (!isUpToDate(rawObj)) {
-                    await kv.set(item.key, JSON.stringify(parsed));
-                }
-
-                if (parsed.status === "processing") {
-                    const lastBeat = parsed.heartbeatAt ?? parsed.processingStartedAt ?? parsed.analyzedAt ?? 0;
-                    if (Date.now() - lastBeat > STALE_PROCESSING_MS) {
-                        orphans.push(parsed);
-                    }
-                } else {
-                    parsedHeaders.push(parsed);
-                }
-            }
-
-            // Verify attachments concurrently in batches to avoid slow sequential IndexedDB transactions
-            const BATCH_SIZE = 8;
-            for (let i = 0; i < parsedHeaders.length; i += BATCH_SIZE) {
-                if (controller.signal.aborted) return;
-                const batch = parsedHeaders.slice(i, i + BATCH_SIZE);
-                await Promise.all(
-                    batch.map(async (header) => {
-                        const verifiedStatus = await checkAttachmentsStatus(header.resumePath, header.imagePath);
-                        if (header.attachmentsStatus !== verifiedStatus) {
-                            header.attachmentsStatus = verifiedStatus;
-                            await kv.set(`resume:${header.id}`, JSON.stringify(header));
-                        }
-                    })
-                );
-            }
-
-            // Clean up confirmed orphans under distributed tab lock
-            for (const orphan of orphans) {
-                if (controller.signal.aborted) return;
-                await withTabLock(`resume-orphan-${orphan.id}`, async () => {
-                    try {
-                        if (orphan.resumePath) await fs.delete(orphan.resumePath);
-                        if (orphan.imagePath) await fs.delete(orphan.imagePath);
-                    } catch {
-                        // Ignore — best effort
-                    }
-                    await deleteResumeEntity(orphan.id);
-                    await kv.delete(`resume:${orphan.id}`);
-                }).catch(() => {});
-            }
-
-            if (loadControllerRef.current === controller && mountedRef.current) {
-                setResumes(parsedHeaders);
-                refreshStorageEstimate();
-            }
-        } catch (err) {
-            if (controller.signal.aborted) return;
-            console.error("Failed to load resumes:", err);
-        } finally {
-            if (loadControllerRef.current === controller && mountedRef.current) {
-                setLoadingResumes(false);
-            }
-        }
-    };
-
-    const lastFocusLoadRef = useRef(Date.now());
-
+    // The import toast timer lives outside the list hook, so it gets its own
+    // unmount cleanup.
     useEffect(() => {
-        mountedRef.current = true;
-        loadResumes();
-        refreshStorageEstimate();
-
-        // Run background storage garbage collection once on initial mount
-        runStorageGarbageCollector().catch(() => {});
-
-        let refreshDebounce: ReturnType<typeof setTimeout> | null = null;
-        const unsubscribe = subscribeResumesChanged((msg) => {
-            if (!mountedRef.current) return;
-            if (msg.type === "storage-cleared") {
-                setResumes([]);
-                refreshStorageEstimate();
-            } else {
-                if (refreshDebounce) clearTimeout(refreshDebounce);
-                refreshDebounce = setTimeout(() => {
-                    if (mountedRef.current) loadResumes();
-                }, 150);
-            }
-        });
-
-        const handleFocus = () => {
-            if (!mountedRef.current) return;
-            const now = Date.now();
-            if (now - lastFocusLoadRef.current < 2000) return;
-            lastFocusLoadRef.current = now;
-            loadResumes();
-        };
-        window.addEventListener("focus", handleFocus);
-
         return () => {
-            mountedRef.current = false;
-            if (refreshDebounce) clearTimeout(refreshDebounce);
-            loadControllerRef.current?.abort();
-            unsubscribe();
-            window.removeEventListener("focus", handleFocus);
+            if (importFeedbackTimerRef.current) clearTimeout(importFeedbackTimerRef.current);
         };
     }, []);
 
@@ -211,7 +85,7 @@ export default function Home() {
         setDeleteError("");
         setIsDeleting(true);
         try {
-            await withTabLock(`resume-delete-${deletingId}`, async () => {
+            await withTabLock(`resume-write-${deletingId}`, async () => {
                 const headerRaw = await kv.get(`resume:${deletingId}`);
                 if (headerRaw) {
                     const header = migrateResumeHeader(JSON.parse(headerRaw));
@@ -228,12 +102,13 @@ export default function Home() {
             });
 
             setDeletingId(null);
+            resetResumes();
             notifyResumesChanged({
                 type: "resume-deleted",
                 resumeId: deletingId,
                 updatedAt: Date.now(),
             });
-            loadResumes();
+            loadResumes().then(commitResumes);
         } catch (err) {
             console.error("Failed to delete resume:", err);
             setDeleteError(t.resume.deleteError);
@@ -272,7 +147,9 @@ export default function Home() {
                 filename = `cvision-backup-encrypted-${new Date().toISOString().slice(0, 10)}.json`;
             }
 
-            const blob = new Blob([JSON.stringify(outputPayload, null, 2)], { type: "application/json" });
+            const blob = new Blob([JSON.stringify(outputPayload, null, 2)], {
+                type: "application/json",
+            });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
@@ -301,6 +178,7 @@ export default function Home() {
 
         setIsImporting(true);
         setImportFeedback(null);
+        if (importFeedbackTimerRef.current) clearTimeout(importFeedbackTimerRef.current);
         try {
             const text = await file.text();
             let json: unknown;
@@ -327,9 +205,12 @@ export default function Home() {
             console.error("Failed to import backup:", err);
             setImportFeedback({
                 type: "error",
-                message: t.home.importError.replace("{error}", err instanceof Error ? err.message : String(err)),
+                message: t.home.importError.replace(
+                    "{error}",
+                    err instanceof Error ? err.message : String(err),
+                ),
             });
-            setTimeout(() => setImportFeedback(null), 6000);
+            clearImportFeedbackLater();
         } finally {
             setIsImporting(false);
             if (fileInputRef.current) fileInputRef.current.value = "";
@@ -349,30 +230,44 @@ export default function Home() {
             return;
         }
 
-        if (res.success && res.skipped === 0 && res.warnings.length === 0 && res.errors.length === 0) {
+        if (
+            res.success &&
+            res.skipped === 0 &&
+            res.warnings.length === 0 &&
+            res.errors.length === 0
+        ) {
             setImportFeedback({
                 type: "success",
                 message: t.home.importSuccess.replace("{count}", String(res.restored)),
             });
-            await loadResumes();
+            resetResumes();
+            commitResumes(await loadResumes());
             notifyResumesChanged({ type: "resumes-changed" });
         } else if (res.restored > 0) {
-            const detail = res.warnings.length > 0 ? ` (${res.warnings.length} notice${res.warnings.length > 1 ? "s" : ""})` : "";
+            const detail =
+                res.warnings.length > 0
+                    ? ` (${res.warnings.length} notice${res.warnings.length > 1 ? "s" : ""})`
+                    : "";
             setImportFeedback({
                 type: "warning",
-                message: t.home.importPartial
-                    .replace("{restored}", String(res.restored))
-                    .replace("{skipped}", String(res.skipped)) + detail,
+                message:
+                    t.home.importPartial
+                        .replace("{restored}", String(res.restored))
+                        .replace("{skipped}", String(res.skipped)) + detail,
             });
-            await loadResumes();
+            resetResumes();
+            commitResumes(await loadResumes());
             notifyResumesChanged({ type: "resumes-changed" });
         } else {
             setImportFeedback({
                 type: "error",
-                message: t.home.importError.replace("{error}", res.errors[0] || "No valid resumes found"),
+                message: t.home.importError.replace(
+                    "{error}",
+                    res.errors[0] || "No valid resumes found",
+                ),
             });
         }
-        setTimeout(() => setImportFeedback(null), 6000);
+        clearImportFeedbackLater();
     };
 
     const handleConfirmDecrypt = async (e?: React.FormEvent) => {
@@ -394,7 +289,7 @@ export default function Home() {
             setDecryptError(
                 decryptErr instanceof InvalidPassphraseError
                     ? t.home.importPasswordIncorrect
-                    : t.home.importCorruptedArchive
+                    : t.home.importCorruptedArchive,
             );
         } finally {
             setIsDecrypting(false);
@@ -447,10 +342,16 @@ export default function Home() {
                             ⚠️
                         </div>
                         <div>
-                            <h3 id="home-delete-dialog-title" className="text-lg font-bold text-slate-900 dark:text-white">
+                            <h3
+                                id="home-delete-dialog-title"
+                                className="text-lg font-bold text-slate-900 dark:text-white"
+                            >
                                 {t.resume.deleteConfirmTitle}
                             </h3>
-                            <p id="home-delete-dialog-description" className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            <p
+                                id="home-delete-dialog-description"
+                                className="text-xs text-slate-500 dark:text-slate-400 mt-1"
+                            >
                                 {t.resume.deleteConfirmMessage}
                             </p>
                         </div>
@@ -487,7 +388,8 @@ export default function Home() {
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-in fade-in duration-200"
                     onClick={(e) => {
-                        if (e.target === e.currentTarget && !isDecrypting) setPendingEncryptedBackup(null);
+                        if (e.target === e.currentTarget && !isDecrypting)
+                            setPendingEncryptedBackup(null);
                     }}
                 >
                     <div
@@ -503,10 +405,16 @@ export default function Home() {
                                 🔐
                             </div>
                             <div>
-                                <h3 id="home-decrypt-dialog-title" className="text-lg font-bold text-slate-900 dark:text-white">
+                                <h3
+                                    id="home-decrypt-dialog-title"
+                                    className="text-lg font-bold text-slate-900 dark:text-white"
+                                >
                                     {t.home.importPasswordPrompt}
                                 </h3>
-                                <p id="home-decrypt-dialog-description" className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                <p
+                                    id="home-decrypt-dialog-description"
+                                    className="text-xs text-slate-500 dark:text-slate-400 mt-0.5"
+                                >
                                     AES-GCM-256
                                 </p>
                             </div>
@@ -537,7 +445,10 @@ export default function Home() {
                             </div>
 
                             {decryptError && (
-                                <p role="alert" className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                                <p
+                                    role="alert"
+                                    className="text-xs text-rose-600 dark:text-rose-400 font-medium"
+                                >
                                     {decryptError}
                                 </p>
                             )}
@@ -576,7 +487,9 @@ export default function Home() {
                     <h1 className="text-slate-900 dark:text-white">
                         <span className="block">{t.home.heroTitle.split("&")[0]}</span>
                         <span className="text-gradient dark:text-gradient">
-                            {t.home.heroTitle.includes("&") ? `& ${t.home.heroTitle.split("&")[1]}` : ""}
+                            {t.home.heroTitle.includes("&")
+                                ? `& ${t.home.heroTitle.split("&")[1]}`
+                                : ""}
                         </span>
                     </h1>
 
@@ -586,7 +499,10 @@ export default function Home() {
 
                     {/* Primary CTA */}
                     <div className="pt-4 flex flex-wrap items-center justify-center gap-4">
-                        <Link to="/upload" className="primary-button text-sm sm:text-base py-3 px-8">
+                        <Link
+                            to="/upload"
+                            className="primary-button text-sm sm:text-base py-3 px-8"
+                        >
                             <span>🚀</span>
                             <span>{t.home.uploadFirstButton}</span>
                         </Link>
@@ -600,11 +516,17 @@ export default function Home() {
                             importFeedback.type === "success"
                                 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                                 : importFeedback.type === "warning"
-                                ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"
-                                : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
+                                  ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"
+                                  : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
                         }`}
                     >
-                        <span>{importFeedback.type === "success" ? "✅ " : importFeedback.type === "warning" ? "⚠️ " : "❌ "}</span>
+                        <span>
+                            {importFeedback.type === "success"
+                                ? "✅ "
+                                : importFeedback.type === "warning"
+                                  ? "⚠️ "
+                                  : "❌ "}
+                        </span>
                         <span>{importFeedback.message}</span>
                     </div>
                 )}
@@ -666,11 +588,17 @@ export default function Home() {
                 ) : filteredResumes.length > 0 ? (
                     <div className="space-y-4">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 px-2">
-                            <span>{filteredResumes.length} {t.home.resumesFound}</span>
+                            <span>
+                                {filteredResumes.length} {t.home.resumesFound}
+                            </span>
                             <div className="flex items-center gap-3">
                                 {storageInfo && (
                                     <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                                        💾 {t.home.storageQuota.replace("{used}", storageInfo.usageMB).replace("{quota}", storageInfo.quotaMB).replace("{percent}", String(storageInfo.percentUsed))}
+                                        💾{" "}
+                                        {t.home.storageQuota
+                                            .replace("{used}", storageInfo.usageMB)
+                                            .replace("{quota}", storageInfo.quotaMB)
+                                            .replace("{percent}", String(storageInfo.percentUsed))}
                                     </span>
                                 )}
                                 <div className="flex items-center gap-1.5">
@@ -719,9 +647,7 @@ export default function Home() {
                         <h3 className="text-base font-bold text-slate-900 dark:text-white">
                             {t.home.noResultsTitle}
                         </h3>
-                        <p className="text-xs text-slate-500">
-                            {t.home.noResultsDesc}
-                        </p>
+                        <p className="text-xs text-slate-500">{t.home.noResultsDesc}</p>
                     </div>
                 ) : (
                     <div className="glass-card p-10 sm:p-16 text-center max-w-lg mx-auto space-y-6">
@@ -737,7 +663,10 @@ export default function Home() {
                             </p>
                         </div>
                         <div className="flex items-center justify-center gap-3">
-                            <Link to="/upload" className="primary-button text-sm py-3 px-6 inline-flex">
+                            <Link
+                                to="/upload"
+                                className="primary-button text-sm py-3 px-6 inline-flex"
+                            >
                                 {t.home.uploadFirstButton}
                             </Link>
                             <input

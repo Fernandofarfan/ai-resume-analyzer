@@ -71,13 +71,18 @@ export const fetchProviderConfig = async (signal?: AbortSignal): Promise<Provide
     try {
         const res = await fetch("/api/config", { signal: controller.signal });
         if (res.ok) {
-            const data = (await res.json()) as { provider?: unknown; requiresConsent?: unknown; requiresAuth?: unknown };
+            const data = (await res.json()) as {
+                provider?: unknown;
+                requiresConsent?: unknown;
+                requiresAuth?: unknown;
+            };
             const provider = KNOWN_PROVIDERS.includes(data.provider as AIProvider)
                 ? (data.provider as AIProvider)
                 : "offline";
             return {
                 provider,
-                requiresConsent: data.requiresConsent === true || provider === "gemini" || provider === "groq",
+                requiresConsent:
+                    data.requiresConsent === true || provider === "gemini" || provider === "groq",
                 requiresAuth: data.requiresAuth === true,
                 known: true,
                 status: provider === "offline" ? "offline" : "ready",
@@ -91,13 +96,19 @@ export const fetchProviderConfig = async (signal?: AbortSignal): Promise<Provide
     }
     // If the backend is unavailable or running purely offline (e.g. static hosting or npm run dev),
     // default to offline heuristic without forcing unnecessary remote consent.
-    return { provider: "offline", requiresConsent: false, requiresAuth: false, known: false, status: "server-unavailable" };
+    return {
+        provider: "offline",
+        requiresConsent: false,
+        requiresAuth: false,
+        known: false,
+        status: "server-unavailable",
+    };
 };
 
 export const requestRemoteAnalysis = async (
     message: string,
     consent: boolean,
-    signal?: AbortSignal
+    signal?: AbortSignal,
 ): Promise<string> => {
     // Combine the caller's cancellation signal with a client-side timeout so a
     // request can never hang indefinitely even if the server misbehaves.

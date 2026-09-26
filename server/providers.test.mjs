@@ -1,16 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import { createServer } from "node:http";
-import {
-    CircuitBreaker,
-    fetchWithTimeout,
-    parseAndValidateFeedback,
-} from "./lib.mjs";
-import {
-    AI_SYSTEM_INSTRUCTION,
-    callGemini,
-    callGroq,
-    callOllama,
-} from "./index.mjs";
+import { CircuitBreaker, parseAndValidateFeedback } from "./lib.mjs";
+import { AI_SYSTEM_INSTRUCTION, callGemini, callGroq, callOllama } from "./index.mjs";
 
 describe("Remote AI Provider Request Formatting & Safety Directives", () => {
     it("exports strict AI_SYSTEM_INSTRUCTION containing untrusted data safety directives", () => {
@@ -24,7 +15,9 @@ describe("Remote AI Provider Request Formatting & Safety Directives", () => {
         let capturedRequest = null;
         const mockGeminiServer = createServer((req, res) => {
             let body = "";
-            req.on("data", (chunk) => { body += chunk; });
+            req.on("data", (chunk) => {
+                body += chunk;
+            });
             req.on("end", () => {
                 capturedRequest = {
                     url: req.url,
@@ -32,13 +25,28 @@ describe("Remote AI Provider Request Formatting & Safety Directives", () => {
                     body: JSON.parse(body),
                 };
                 res.writeHead(200, { "Content-Type": "application/json" });
-                res.end(JSON.stringify({
-                    candidates: [{
-                        content: {
-                            parts: [{ text: JSON.stringify({ overallScore: 88, ATS: { score: 85, tips: [] }, toneAndStyle: { score: 90, tips: [] }, content: { score: 87, tips: [] }, structure: { score: 90, tips: [] }, skills: { score: 88, tips: [] } }) }],
-                        },
-                    }],
-                }));
+                res.end(
+                    JSON.stringify({
+                        candidates: [
+                            {
+                                content: {
+                                    parts: [
+                                        {
+                                            text: JSON.stringify({
+                                                overallScore: 88,
+                                                ATS: { score: 85, tips: [] },
+                                                toneAndStyle: { score: 90, tips: [] },
+                                                content: { score: 87, tips: [] },
+                                                structure: { score: 90, tips: [] },
+                                                skills: { score: 88, tips: [] },
+                                            }),
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    }),
+                );
             });
         });
 
@@ -56,7 +64,9 @@ describe("Remote AI Provider Request Formatting & Safety Directives", () => {
             expect(text).toContain("overallScore");
             expect(capturedRequest).not.toBeNull();
             expect(capturedRequest.headers["x-goog-api-key"]).toBe("test-gemini-key");
-            expect(capturedRequest.body.systemInstruction.parts[0].text).toBe(AI_SYSTEM_INSTRUCTION);
+            expect(capturedRequest.body.systemInstruction.parts[0].text).toBe(
+                AI_SYSTEM_INSTRUCTION,
+            );
             expect(capturedRequest.body.contents[0].parts[0].text).toBe(promptMessage);
         } finally {
             await new Promise((resolve) => mockGeminiServer.close(resolve));
@@ -67,20 +77,33 @@ describe("Remote AI Provider Request Formatting & Safety Directives", () => {
         let capturedRequest = null;
         const mockGroqServer = createServer((req, res) => {
             let body = "";
-            req.on("data", (chunk) => { body += chunk; });
+            req.on("data", (chunk) => {
+                body += chunk;
+            });
             req.on("end", () => {
                 capturedRequest = {
                     headers: req.headers,
                     body: JSON.parse(body),
                 };
                 res.writeHead(200, { "Content-Type": "application/json" });
-                res.end(JSON.stringify({
-                    choices: [{
-                        message: {
-                            content: JSON.stringify({ overallScore: 92, ATS: { score: 90, tips: [] }, toneAndStyle: { score: 95, tips: [] }, content: { score: 92, tips: [] }, structure: { score: 90, tips: [] }, skills: { score: 93, tips: [] } }),
-                        },
-                    }],
-                }));
+                res.end(
+                    JSON.stringify({
+                        choices: [
+                            {
+                                message: {
+                                    content: JSON.stringify({
+                                        overallScore: 92,
+                                        ATS: { score: 90, tips: [] },
+                                        toneAndStyle: { score: 95, tips: [] },
+                                        content: { score: 92, tips: [] },
+                                        structure: { score: 90, tips: [] },
+                                        skills: { score: 93, tips: [] },
+                                    }),
+                                },
+                            },
+                        ],
+                    }),
+                );
             });
         });
 
@@ -110,15 +133,26 @@ describe("Remote AI Provider Request Formatting & Safety Directives", () => {
         let capturedRequest = null;
         const mockOllamaServer = createServer((req, res) => {
             let body = "";
-            req.on("data", (chunk) => { body += chunk; });
+            req.on("data", (chunk) => {
+                body += chunk;
+            });
             req.on("end", () => {
                 capturedRequest = {
                     body: JSON.parse(body),
                 };
                 res.writeHead(200, { "Content-Type": "application/json" });
-                res.end(JSON.stringify({
-                    response: JSON.stringify({ overallScore: 78, ATS: { score: 75, tips: [] }, toneAndStyle: { score: 80, tips: [] }, content: { score: 78, tips: [] }, structure: { score: 80, tips: [] }, skills: { score: 77, tips: [] } }),
-                }));
+                res.end(
+                    JSON.stringify({
+                        response: JSON.stringify({
+                            overallScore: 78,
+                            ATS: { score: 75, tips: [] },
+                            toneAndStyle: { score: 80, tips: [] },
+                            content: { score: 78, tips: [] },
+                            structure: { score: 80, tips: [] },
+                            skills: { score: 77, tips: [] },
+                        }),
+                    }),
+                );
             });
         });
 
@@ -155,7 +189,8 @@ describe("Provider Circuit Breaker & Fail-Fast Mechanics", () => {
 
         const unreliableProvider = async () => {
             callCount++;
-            if (fail) throw Object.assign(new Error("Upstream 503 Service Unavailable"), { status: 503 });
+            if (fail)
+                throw Object.assign(new Error("Upstream 503 Service Unavailable"), { status: 503 });
             return "success-result";
         };
 

@@ -1,14 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import "fake-indexeddb/auto";
-import {
-    MAX_PDF_BYTES,
-    MAX_PDF_PAGES,
-    MAX_BACKUP_TOTAL_BYTES,
-} from "~/lib/limits";
-import {
-    importBackupData,
-    estimateStorageQuota,
-} from "~/lib/store";
+import { MAX_PDF_BYTES, MAX_PDF_PAGES } from "~/lib/limits";
+import { importBackupData, estimateStorageQuota } from "~/lib/store";
 
 describe("UI Error Handling & Boundary Validations", () => {
     beforeEach(() => {
@@ -38,7 +31,7 @@ describe("UI Error Handling & Boundary Validations", () => {
     });
 
     it("rejects corrupted or non-object backup data during import", async () => {
-        const corruptedData = "not a valid backup object" as any;
+        const corruptedData = "not a valid backup object";
         const result = await importBackupData(corruptedData);
         expect(result.success).toBe(false);
         expect(result.restored).toBe(0);
@@ -61,7 +54,7 @@ describe("UI Error Handling & Boundary Validations", () => {
             resumes: oversizedResumes,
         };
 
-        const result = await importBackupData(oversizedBackup as any);
+        const result = await importBackupData(oversizedBackup);
         expect(result.success).toBe(false);
     });
 });

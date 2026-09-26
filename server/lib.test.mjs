@@ -36,7 +36,12 @@ describe("resolveSafePath", () => {
 
 describe("RateLimiter", () => {
     it("allows requests within the window and blocks excess", () => {
-        const limiter = new RateLimiter({ windowMs: 60000, maxPerWindow: 3, maxPerDay: 100, now: () => 1000 });
+        const limiter = new RateLimiter({
+            windowMs: 60000,
+            maxPerWindow: 3,
+            maxPerDay: 100,
+            now: () => 1000,
+        });
         expect(limiter.check("1.2.3.4")).toBe(false);
         expect(limiter.check("1.2.3.4")).toBe(false);
         expect(limiter.check("1.2.3.4")).toBe(false);
@@ -44,21 +49,36 @@ describe("RateLimiter", () => {
     });
 
     it("tracks each IP independently", () => {
-        const limiter = new RateLimiter({ windowMs: 60000, maxPerWindow: 1, maxPerDay: 100, now: () => 1000 });
+        const limiter = new RateLimiter({
+            windowMs: 60000,
+            maxPerWindow: 1,
+            maxPerDay: 100,
+            now: () => 1000,
+        });
         expect(limiter.check("a")).toBe(false);
         expect(limiter.check("b")).toBe(false);
         expect(limiter.check("a")).toBe(true);
     });
 
     it("enforces a rolling daily quota", () => {
-        const limiter = new RateLimiter({ windowMs: 60000, maxPerWindow: 100, maxPerDay: 2, now: () => 1000 });
+        const limiter = new RateLimiter({
+            windowMs: 60000,
+            maxPerWindow: 100,
+            maxPerDay: 2,
+            now: () => 1000,
+        });
         expect(limiter.check("ip")).toBe(false);
         expect(limiter.check("ip")).toBe(false);
         expect(limiter.check("ip")).toBe(true);
     });
 
     it("sweeps stale entries", () => {
-        const limiter = new RateLimiter({ windowMs: 60000, maxPerWindow: 1, maxPerDay: 100, now: () => 1000 });
+        const limiter = new RateLimiter({
+            windowMs: 60000,
+            maxPerWindow: 1,
+            maxPerDay: 100,
+            now: () => 1000,
+        });
         limiter.check("ip");
         expect(limiter.hits.has("ip")).toBe(true);
         limiter.now = () => 1000 + 25 * 3600 * 1000;
@@ -67,7 +87,12 @@ describe("RateLimiter", () => {
     });
 
     it("bounds per-IP memory growth during an attack", () => {
-        const limiter = new RateLimiter({ windowMs: 60000, maxPerWindow: 1000, maxPerDay: 5, now: () => 1000 });
+        const limiter = new RateLimiter({
+            windowMs: 60000,
+            maxPerWindow: 1000,
+            maxPerDay: 5,
+            now: () => 1000,
+        });
         for (let i = 0; i < 100; i++) limiter.check("ip");
         expect(limiter.hits.get("ip").length).toBeLessThanOrEqual(6);
     });
@@ -92,7 +117,9 @@ describe("validatePrompt", () => {
     });
 
     it("rejects an oversized prompt", () => {
-        expect(validatePrompt(JSON.stringify({ message: "x".repeat(MAX_PROMPT_CHARS + 1) })).error).toBe("Prompt too large");
+        expect(
+            validatePrompt(JSON.stringify({ message: "x".repeat(MAX_PROMPT_CHARS + 1) })).error,
+        ).toBe("Prompt too large");
     });
 });
 
@@ -100,7 +127,10 @@ describe("validateFeedbackShape and normalizeFeedback", () => {
     const valid = {
         overallScore: 80,
         ATS: { score: 75, tips: [{ type: "good", tip: "Great structure" }] },
-        toneAndStyle: { score: 85, tips: [{ type: "improve", tip: "Action verbs", explanation: "Use led, built" }] },
+        toneAndStyle: {
+            score: 85,
+            tips: [{ type: "improve", tip: "Action verbs", explanation: "Use led, built" }],
+        },
         content: { score: 90, tips: [] },
         structure: { score: 70, tips: [] },
         skills: { score: 80, tips: [] },
@@ -197,8 +227,12 @@ describe("validateAuthHeader", () => {
 
     it("rejects missing or mismatched token when expectedToken is set", () => {
         expect(validateAuthHeader({ headers: {} }, "secret-token-123")).toBe(false);
-        expect(validateAuthHeader({ headers: { authorization: "Bearer wrong" } }, "secret-token-123")).toBe(false);
-        expect(validateAuthHeader({ headers: { "x-api-key": "wrong" } }, "secret-token-123")).toBe(false);
+        expect(
+            validateAuthHeader({ headers: { authorization: "Bearer wrong" } }, "secret-token-123"),
+        ).toBe(false);
+        expect(validateAuthHeader({ headers: { "x-api-key": "wrong" } }, "secret-token-123")).toBe(
+            false,
+        );
     });
 });
 
@@ -213,17 +247,33 @@ describe("CircuitBreaker", () => {
 
     it("trips to OPEN after consecutive failures and fast-fails with 503", async () => {
         let fakeNow = 1000;
-        const cb = new CircuitBreaker({ failureThreshold: 2, cooldownMs: 5000, now: () => fakeNow });
+        const cb = new CircuitBreaker({
+            failureThreshold: 2,
+            cooldownMs: 5000,
+            now: () => fakeNow,
+        });
 
-        await expect(cb.execute(async () => { throw new Error("fail 1"); })).rejects.toThrow("fail 1");
+        await expect(
+            cb.execute(async () => {
+                throw new Error("fail 1");
+            }),
+        ).rejects.toThrow("fail 1");
         expect(cb.getState()).toBe("CLOSED");
 
-        await expect(cb.execute(async () => { throw new Error("fail 2"); })).rejects.toThrow("fail 2");
+        await expect(
+            cb.execute(async () => {
+                throw new Error("fail 2");
+            }),
+        ).rejects.toThrow("fail 2");
         expect(cb.getState()).toBe("OPEN");
 
         // Fast-fails immediately without calling fn
         let executed = false;
-        await expect(cb.execute(async () => { executed = true; })).rejects.toMatchObject({
+        await expect(
+            cb.execute(async () => {
+                executed = true;
+            }),
+        ).rejects.toMatchObject({
             status: 503,
             isCircuitOpen: true,
         });
@@ -243,42 +293,60 @@ describe("CircuitBreaker", () => {
         const cb = new CircuitBreaker({ failureThreshold: 2, cooldownMs: 5000 });
 
         // 400 Bad Request should not count as provider failure
-        await expect(cb.execute(async () => {
-            throw Object.assign(new Error("Bad user prompt"), { status: 400 });
-        })).rejects.toThrow("Bad user prompt");
+        await expect(
+            cb.execute(async () => {
+                throw Object.assign(new Error("Bad user prompt"), { status: 400 });
+            }),
+        ).rejects.toThrow("Bad user prompt");
         expect(cb.getState()).toBe("CLOSED");
 
         // 404 Not Found should not count as provider failure
-        await expect(cb.execute(async () => {
-            throw Object.assign(new Error("Resource not found"), { status: 404 });
-        })).rejects.toThrow("Resource not found");
+        await expect(
+            cb.execute(async () => {
+                throw Object.assign(new Error("Resource not found"), { status: 404 });
+            }),
+        ).rejects.toThrow("Resource not found");
         expect(cb.getState()).toBe("CLOSED");
 
         // 502 Bad Gateway counts as provider failure
-        await expect(cb.execute(async () => {
-            throw Object.assign(new Error("Provider 502"), { status: 502 });
-        })).rejects.toThrow("Provider 502");
+        await expect(
+            cb.execute(async () => {
+                throw Object.assign(new Error("Provider 502"), { status: 502 });
+            }),
+        ).rejects.toThrow("Provider 502");
         expect(cb.getState()).toBe("CLOSED");
 
         // 503 Gateway Timeout triggers trip to OPEN
-        await expect(cb.execute(async () => {
-            throw Object.assign(new Error("Provider 503"), { status: 503 });
-        })).rejects.toThrow("Provider 503");
+        await expect(
+            cb.execute(async () => {
+                throw Object.assign(new Error("Provider 503"), { status: 503 });
+            }),
+        ).rejects.toThrow("Provider 503");
         expect(cb.getState()).toBe("OPEN");
     });
 
     it("allows only a single probe when in HALF_OPEN state and rejects concurrent callers", async () => {
         let fakeNow = 1000;
-        const cb = new CircuitBreaker({ failureThreshold: 1, cooldownMs: 5000, now: () => fakeNow });
+        const cb = new CircuitBreaker({
+            failureThreshold: 1,
+            cooldownMs: 5000,
+            now: () => fakeNow,
+        });
 
-        await expect(cb.execute(async () => { throw new Error("trip"); })).rejects.toThrow("trip");
+        await expect(
+            cb.execute(async () => {
+                throw new Error("trip");
+            }),
+        ).rejects.toThrow("trip");
         expect(cb.getState()).toBe("OPEN");
 
         fakeNow += 6000;
         expect(cb.getState()).toBe("HALF_OPEN");
 
         let releaseProbe;
-        const probePromise = new Promise((resolve) => { releaseProbe = resolve; });
+        const probePromise = new Promise((resolve) => {
+            releaseProbe = resolve;
+        });
 
         // Start the first probe
         const firstProbe = cb.execute(async () => {
@@ -313,7 +381,9 @@ describe("fetchWithTimeout", () => {
     it("respects caller cancellation without marking as timeout", async () => {
         const controller = new AbortController();
         controller.abort("User cancelled");
-        await expect(fetchWithTimeout("http://10.255.255.1:81/test", {}, 5000, controller.signal)).rejects.not.toMatchObject({
+        await expect(
+            fetchWithTimeout("http://10.255.255.1:81/test", {}, 5000, controller.signal),
+        ).rejects.not.toMatchObject({
             status: 504,
             isTimeout: true,
         });

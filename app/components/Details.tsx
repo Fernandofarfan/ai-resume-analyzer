@@ -1,21 +1,10 @@
-import { useState } from "react";
-import {
-    Accordion,
-    AccordionContent,
-    AccordionHeader,
-    AccordionItem,
-} from "./Accordion";
+import { useEffect, useRef, useState } from "react";
+import { Accordion, AccordionContent, AccordionHeader, AccordionItem } from "./Accordion";
 import ScoreBadge from "~/components/ScoreBadge";
 import { useI18nStore } from "~/lib/i18n";
 import type { Feedback, BulletRewrite } from "~/domain/feedback";
 
-const CategoryHeader = ({
-    title,
-    categoryScore,
-}: {
-    title: string;
-    categoryScore: number;
-}) => {
+const CategoryHeader = ({ title, categoryScore }: { title: string; categoryScore: number }) => {
     return (
         <div className="flex flex-row items-center justify-between w-full py-1 pr-2">
             <span className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
@@ -36,6 +25,17 @@ const CategoryContent = ({
     const { t } = useI18nStore();
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
     const [copyErrorIndex, setCopyErrorIndex] = useState<number | null>(null);
+    const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Clear pending "reset the badge" timers so they cannot fire after unmount.
+    useEffect(
+        () => () => {
+            if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+            if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+        },
+        [],
+    );
 
     const handleCopy = (text: string, idx: number) => {
         navigator.clipboard
@@ -43,12 +43,14 @@ const CategoryContent = ({
             .then(() => {
                 setCopiedIndex(idx);
                 setCopyErrorIndex(null);
-                setTimeout(() => setCopiedIndex(null), 2000);
+                if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+                copiedTimerRef.current = setTimeout(() => setCopiedIndex(null), 2000);
             })
             .catch((err) => {
                 console.error("Failed to copy text:", err);
                 setCopyErrorIndex(idx);
-                setTimeout(() => setCopyErrorIndex(null), 3000);
+                if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+                errorTimerRef.current = setTimeout(() => setCopyErrorIndex(null), 3000);
             });
     };
 
@@ -71,9 +73,7 @@ const CategoryContent = ({
                                 <span className="text-base">
                                     {tip.type === "good" ? "✓" : "⚠️"}
                                 </span>
-                                <h4 className="text-sm sm:text-base font-bold">
-                                    {tip.tip}
-                                </h4>
+                                <h4 className="text-sm sm:text-base font-bold">{tip.tip}</h4>
                             </div>
 
                             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed pl-6">
@@ -89,10 +89,14 @@ const CategoryContent = ({
                                         </span>
                                         <button
                                             type="button"
-                                            onClick={() => handleCopy(rewrite.suggestedRewrite, index)}
+                                            onClick={() =>
+                                                handleCopy(rewrite.suggestedRewrite, index)
+                                            }
                                             className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                                         >
-                                            {copiedIndex === index ? t.bulletImprover.copied : t.bulletImprover.applyIdea}
+                                            {copiedIndex === index
+                                                ? t.bulletImprover.copied
+                                                : t.bulletImprover.applyIdea}
                                         </button>
                                     </div>
                                     <p className="text-xs font-mono text-slate-800 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-950/80 p-2.5 rounded-lg border border-slate-200/60 dark:border-slate-800/60">
@@ -102,7 +106,10 @@ const CategoryContent = ({
                                         {rewrite.reasoning}
                                     </p>
                                     {copyErrorIndex === index && (
-                                        <p role="alert" className="text-[10px] text-rose-600 dark:text-rose-400">
+                                        <p
+                                            role="alert"
+                                            className="text-[10px] text-rose-600 dark:text-rose-400"
+                                        >
                                             {t.bulletImprover.copyError}
                                         </p>
                                     )}
@@ -126,7 +133,10 @@ const Details = ({ feedback }: { feedback: Feedback }) => {
             </h3>
 
             <Accordion allowMultiple defaultOpen="tone-style">
-                <AccordionItem id="tone-style" className="border-b border-slate-200/80 dark:border-slate-800/80 py-1">
+                <AccordionItem
+                    id="tone-style"
+                    className="border-b border-slate-200/80 dark:border-slate-800/80 py-1"
+                >
                     <AccordionHeader itemId="tone-style">
                         <CategoryHeader
                             title={t.resume.categories.toneAndStyle}
@@ -141,7 +151,10 @@ const Details = ({ feedback }: { feedback: Feedback }) => {
                     </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem id="content" className="border-b border-slate-200/80 dark:border-slate-800/80 py-1">
+                <AccordionItem
+                    id="content"
+                    className="border-b border-slate-200/80 dark:border-slate-800/80 py-1"
+                >
                     <AccordionHeader itemId="content">
                         <CategoryHeader
                             title={t.resume.categories.content}
@@ -156,7 +169,10 @@ const Details = ({ feedback }: { feedback: Feedback }) => {
                     </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem id="structure" className="border-b border-slate-200/80 dark:border-slate-800/80 py-1">
+                <AccordionItem
+                    id="structure"
+                    className="border-b border-slate-200/80 dark:border-slate-800/80 py-1"
+                >
                     <AccordionHeader itemId="structure">
                         <CategoryHeader
                             title={t.resume.categories.structure}

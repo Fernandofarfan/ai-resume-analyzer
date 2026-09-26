@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
     clampScore,
     validateFeedback,
-    normalizeFeedback,
     parseFeedbackText,
     validateAuthHeader,
 } from "../../../shared/schema.mjs";
@@ -48,18 +47,21 @@ describe("shared pure schema validation and normalization", () => {
         expect(result?.ATS.score).toBe(90);
         expect(result?.keywords?.matching).toEqual(["React", "TypeScript"]);
         expect(result?.keywords?.missing).toEqual(["GraphQL"]);
-        expect((result as any)?.injectedBadField).toBeUndefined();
+        expect(result).not.toHaveProperty("injectedBadField");
     });
 
     it("parses JSON wrapped in markdown fences", () => {
-        const fenced = "```json\n" + JSON.stringify({
-            overallScore: 80,
-            ATS: { score: 80, tips: [] },
-            toneAndStyle: { score: 80, tips: [] },
-            content: { score: 80, tips: [] },
-            structure: { score: 80, tips: [] },
-            skills: { score: 80, tips: [] },
-        }) + "\n```";
+        const fenced =
+            "```json\n" +
+            JSON.stringify({
+                overallScore: 80,
+                ATS: { score: 80, tips: [] },
+                toneAndStyle: { score: 80, tips: [] },
+                content: { score: 80, tips: [] },
+                structure: { score: 80, tips: [] },
+                skills: { score: 80, tips: [] },
+            }) +
+            "\n```";
 
         const parsed = parseFeedbackText(fenced);
         expect(parsed).not.toBeNull();
@@ -71,20 +73,20 @@ describe("shared pure schema validation and normalization", () => {
         expect(
             validateAuthHeader(
                 { headers: { authorization: "Bearer secret-token-123" } },
-                "secret-token-123"
-            )
+                "secret-token-123",
+            ),
         ).toBe(true);
         expect(
             validateAuthHeader(
                 { headers: { "x-api-key": "secret-token-123" } },
-                "secret-token-123"
-            )
+                "secret-token-123",
+            ),
         ).toBe(true);
         expect(
             validateAuthHeader(
                 { headers: { authorization: "Bearer wrong-token" } },
-                "secret-token-123"
-            )
+                "secret-token-123",
+            ),
         ).toBe(false);
     });
 });

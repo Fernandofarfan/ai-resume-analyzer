@@ -1,15 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const CHECK_EXTENSIONS = new Set([
-    ".ts",
-    ".tsx",
-    ".js",
-    ".mjs",
-    ".json",
-    ".css",
-    ".md",
-]);
+const CHECK_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".json", ".css", ".md"]);
 
 const IGNORE_DIRS = new Set([
     "node_modules",

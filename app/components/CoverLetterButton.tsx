@@ -12,7 +12,10 @@ export default function CoverLetterButton({ onClick, className }: CoverLetterBut
         <button
             type="button"
             onClick={onClick}
-            className={className || "secondary-button text-xs font-semibold py-1.5 px-3 inline-flex items-center gap-1.5"}
+            className={
+                className ||
+                "secondary-button text-xs font-semibold py-1.5 px-3 inline-flex items-center gap-1.5"
+            }
             title={t.resume.coverLetterBtn}
             aria-label={t.resume.coverLetterBtn}
         >

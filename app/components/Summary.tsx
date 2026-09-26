@@ -10,13 +10,16 @@ const Category = ({ title, score, icon }: { title: string; score: number; icon: 
             <div className="flex items-center gap-3">
                 <span className="text-xl">{icon}</span>
                 <div>
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{title}</p>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {title}
+                    </p>
                 </div>
             </div>
             <div className="flex items-center gap-3">
                 <ScoreBadge score={score} />
                 <span className="text-sm font-bold text-slate-900 dark:text-white w-12 text-right">
-                    {score}<span className="text-xs text-slate-400 font-normal">/100</span>
+                    {score}
+                    <span className="text-xs text-slate-400 font-normal">/100</span>
                 </span>
             </div>
         </div>
@@ -29,26 +32,29 @@ const Summary = ({ feedback, analyzedAt }: { feedback: Feedback; analyzedAt?: nu
 
     const sourceLabel = feedback.source === "ai" ? t.resume.sourceAI : t.resume.sourceHeuristic;
     const analyzedDate = analyzedAt
-        ? new Date(analyzedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+        ? new Date(analyzedAt).toLocaleString(undefined, {
+              dateStyle: "medium",
+              timeStyle: "short",
+          })
         : null;
 
     const confidenceLabel =
         feedback.confidence === "high"
             ? t.resume.confidenceHigh
             : feedback.confidence === "medium"
-            ? t.resume.confidenceMedium
-            : feedback.confidence === "low"
-            ? t.resume.confidenceLow
-            : null;
+              ? t.resume.confidenceMedium
+              : feedback.confidence === "low"
+                ? t.resume.confidenceLow
+                : null;
 
     const confidenceHint =
         feedback.confidence === "high"
             ? t.resume.confidenceHighHint
             : feedback.confidence === "medium"
-            ? t.resume.confidenceMediumHint
-            : feedback.confidence === "low"
-            ? t.resume.confidenceLowHint
-            : undefined;
+              ? t.resume.confidenceMediumHint
+              : feedback.confidence === "low"
+                ? t.resume.confidenceLowHint
+                : undefined;
 
     return (
         <div className="glass-card p-6 sm:p-8 w-full space-y-6">

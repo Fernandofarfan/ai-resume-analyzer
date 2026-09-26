@@ -17,12 +17,7 @@ const ScoreCircle = ({ score = 75 }: { score: number }) => {
 
     return (
         <div className="relative w-[84px] h-[84px]">
-            <svg
-                height="100%"
-                width="100%"
-                viewBox="0 0 84 84"
-                className="transform -rotate-90"
-            >
+            <svg height="100%" width="100%" viewBox="0 0 84 84" className="transform -rotate-90">
                 {/* Background circle */}
                 <circle
                     cx="42"
