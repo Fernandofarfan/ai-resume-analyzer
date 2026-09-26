@@ -1,11 +1,11 @@
-FROM node:22-alpine AS build-env
+FROM node:26-alpine AS build-env
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 COPY --from=build-env /app/build/client /app/build/client
