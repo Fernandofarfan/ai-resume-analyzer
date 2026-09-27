@@ -92,7 +92,7 @@ export const getResumeEntity = async (id: string): Promise<Resume | null> => {
             const tx = db.transaction(STORE_RESUMES, "readonly");
             const store = tx.objectStore(STORE_RESUMES);
             const req = store.get(id);
-            req.onsuccess = () => {
+            req.onsuccess = async () => {
                 const raw = req.result as unknown;
                 if (!raw) {
                     resolve(null);
@@ -100,7 +100,17 @@ export const getResumeEntity = async (id: string): Promise<Resume | null> => {
                 }
                 const migrated = migrateResume(raw);
                 if (migrated && (raw as Resume).schemaVersion !== migrated.schemaVersion) {
-                    saveResumeEntity(migrated).catch(() => {});
+                    // Persist the migration with an optimistic version guard and
+                    // return the *stored* entity, so callers get the version they
+                    // must use for their own guarded save instead of silently
+                    // losing their update to a version_mismatch.
+                    const saved = await saveResumeEntity(migrated, (raw as Resume).version).catch(
+                        () => null,
+                    );
+                    if (saved) {
+                        resolve(migrateResume(saved.entity) ?? saved.entity);
+                        return;
+                    }
                 }
                 resolve(migrated);
             };

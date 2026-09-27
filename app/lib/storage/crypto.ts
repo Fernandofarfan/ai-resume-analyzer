@@ -132,6 +132,13 @@ export const encryptBackupData = async (
     const plaintext = JSON.stringify(data);
     const encoded = new TextEncoder().encode(plaintext);
 
+    // Enforce the same ceiling `decryptBackupData` applies, otherwise we would
+    // happily produce an archive we refuse to decrypt later.
+    const estimatedCiphertextChars = Math.ceil((encoded.length * 4) / 3) + 64;
+    if (estimatedCiphertextChars > MAX_ENCRYPTED_DATA_CHARS) {
+        throw new Error("Backup data is too large to be encrypted and restored safely");
+    }
+
     const ciphertextBuffer = await crypto.subtle.encrypt(
         {
             name: "AES-GCM",

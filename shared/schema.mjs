@@ -188,15 +188,20 @@ export const parseFeedbackText = (text) => {
     }
 };
 
+// Portable constant-time comparison (no node:crypto, this module is also
+// bundled for the browser). The length check is folded into the result instead
+// of returning early, so the comparison does not leak the expected token length.
 const constantTimeEqual = (a, b) => {
     if (typeof a !== "string" || typeof b !== "string") return false;
     const enc = new TextEncoder();
     const bufA = enc.encode(a);
     const bufB = enc.encode(b);
-    if (bufA.byteLength !== bufB.byteLength) return false;
-    let mismatch = 0;
-    for (let i = 0; i < bufA.byteLength; i++) {
-        mismatch |= bufA[i] ^ bufB[i];
+    const max = Math.max(bufA.byteLength, bufB.byteLength);
+    let mismatch = bufA.byteLength === bufB.byteLength ? 0 : 1;
+    for (let i = 0; i < max; i++) {
+        const left = i < bufA.byteLength ? bufA[i] : 0;
+        const right = i < bufB.byteLength ? bufB[i] : 0;
+        mismatch |= left ^ right;
     }
     return mismatch === 0;
 };

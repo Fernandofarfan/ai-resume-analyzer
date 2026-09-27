@@ -15,6 +15,9 @@ const ResumeCard = ({
     const { fs } = useAppStore();
     const { t } = useI18nStore();
     const [resumeUrl, setResumeUrl] = useState("");
+    // Distinguishes "still loading" from "nothing to show", so records whose
+    // preview read failed do not display a perpetual loading state.
+    const [imageUnavailable, setImageUnavailable] = useState(false);
     const cardRef = useRef<HTMLDivElement>(null);
     // Thumbnails are only read from IndexedDB once the card approaches the
     // viewport, so a long list does not decode every preview up front.
@@ -72,17 +75,29 @@ const ResumeCard = ({
         let createdUrl: string | null = null;
 
         const loadResume = async () => {
-            const blob = await fs.read(imagePath);
-            if (cancelled || !blob) return;
-            createdUrl = URL.createObjectURL(blob);
-            if (cancelled) {
-                URL.revokeObjectURL(createdUrl);
-                return;
+            try {
+                const blob = await fs.read(imagePath);
+                if (cancelled) return;
+                if (!blob) {
+                    setImageUnavailable(true);
+                    return;
+                }
+                createdUrl = URL.createObjectURL(blob);
+                if (cancelled) {
+                    URL.revokeObjectURL(createdUrl);
+                    return;
+                }
+                setImageUnavailable(false);
+                setResumeUrl(createdUrl);
+            } catch (err) {
+                // A storage failure must not surface as an unhandled rejection;
+                // the placeholder below already communicates the missing preview.
+                console.warn("Failed to load resume preview:", err);
+                if (!cancelled) setImageUnavailable(true);
             }
-            setResumeUrl(createdUrl);
         };
 
-        loadResume();
+        void loadResume();
 
         return () => {
             cancelled = true;
@@ -165,8 +180,13 @@ const ResumeCard = ({
                         className="w-full h-full object-cover object-top opacity-90 group-hover:opacity-100 group-hover:scale-102 transition-all duration-300"
                     />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-slate-400">
-                        <span className="text-xs">{t.resume.loadingPreview}</span>
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-400">
+                        <span>📄</span>
+                        <span className="text-xs">
+                            {!imagePath || imageUnavailable
+                                ? t.resume.previewUnavailable
+                                : t.resume.loadingPreview}
+                        </span>
                     </div>
                 )}
             </div>

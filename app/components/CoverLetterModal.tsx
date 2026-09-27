@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useI18nStore } from "~/lib/i18n";
 import { useDialog } from "~/lib/useDialog";
+import { downloadBlob } from "~/lib/utils";
 import { extractProfileSignals } from "~/lib/analysis/heuristic";
 import type { Feedback } from "~/domain/feedback";
 
@@ -178,10 +179,6 @@ const CoverLetterModal: React.FC<CoverLetterModalProps> = ({
     };
 
     const handleDownload = () => {
-        const blob = new Blob([letterText], { type: "text/plain;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
         const prefix = language === "es" ? "Carta_Presentacion" : "Cover_Letter";
         // Strip characters that are illegal in file names, including control codes.
         const sanitized = (companyName || "")
@@ -190,11 +187,10 @@ const CoverLetterModal: React.FC<CoverLetterModalProps> = ({
             .replace(/\s+/g, "_")
             .slice(0, 80);
         const fallback = language === "es" ? "Empresa" : "Company";
-        a.download = `${prefix}_${sanitized || fallback}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        downloadBlob(
+            new Blob([letterText], { type: "text/plain;charset=utf-8" }),
+            `${prefix}_${sanitized || fallback}.txt`,
+        );
     };
 
     return (
@@ -256,7 +252,7 @@ const CoverLetterModal: React.FC<CoverLetterModalProps> = ({
                 <div className="my-4 flex-1 overflow-y-auto">
                     <textarea
                         id="cover-letter-textarea"
-                        aria-labelledby="cover-letter-modal-title"
+                        aria-labelledby="cover-letter-title"
                         aria-describedby="cover-letter-subtitle"
                         rows={14}
                         value={letterText}

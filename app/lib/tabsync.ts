@@ -20,9 +20,25 @@ const TAB_ID =
 
 export const getTabId = (): string => TAB_ID;
 
+// A single long-lived channel is reused instead of creating and immediately
+// closing one per notification: closing right after `postMessage` can drop the
+// message in some engines, and this is the only cross-tab invalidation signal.
+let broadcastChannel: BroadcastChannel | null = null;
+
+const getBroadcastChannel = (): BroadcastChannel | null => {
+    if (broadcastChannel) return broadcastChannel;
+    try {
+        broadcastChannel = new BroadcastChannel(CHANNEL);
+        return broadcastChannel;
+    } catch {
+        return null;
+    }
+};
+
 export const notifyResumesChanged = (payload?: Partial<TabSyncMessage>): void => {
     try {
-        const channel = new BroadcastChannel(CHANNEL);
+        const channel = getBroadcastChannel();
+        if (!channel) return;
         const message: TabSyncMessage = {
             type: payload?.type ?? "resumes-changed",
             resumeId: payload?.resumeId,
@@ -36,7 +52,6 @@ export const notifyResumesChanged = (payload?: Partial<TabSyncMessage>): void =>
             sourceTabId: TAB_ID,
         };
         channel.postMessage(message);
-        channel.close();
     } catch {
         // BroadcastChannel unsupported or restricted — ignore gracefully.
     }
@@ -49,7 +64,11 @@ export const subscribeResumesChanged = (
         const channel = new BroadcastChannel(CHANNEL);
         channel.onmessage = (event) => {
             if (event.data && typeof event.data === "object") {
-                callback(event.data as TabSyncMessage);
+                const message = event.data as TabSyncMessage;
+                // Ignore our own broadcasts: the originating tab already updated
+                // its state and would otherwise reload twice.
+                if (message.sourceTabId === TAB_ID) return;
+                callback(message);
             }
         };
         return () => channel.close();
@@ -59,16 +78,22 @@ export const subscribeResumesChanged = (
 };
 
 // Optimistic concurrency check: returns true if incoming update is strictly older
-// than the currently stored record.
+// than the currently stored record. Versions take precedence when both sides are
+// versioned; timestamps only break ties (clock skew must not reject a write that
+// carries a genuinely newer version).
 export const isStaleWrite = (
     incoming: { updatedAt?: number; version?: number },
     current: { updatedAt?: number; version?: number },
 ): boolean => {
-    if (typeof incoming.version === "number" && typeof current.version === "number") {
-        if (incoming.version < current.version) return true;
+    const hasVersions = typeof incoming.version === "number" && typeof current.version === "number";
+    const hasTimestamps =
+        typeof incoming.updatedAt === "number" && typeof current.updatedAt === "number";
+
+    if (hasVersions && incoming.version !== current.version) {
+        return incoming.version! < current.version!;
     }
-    if (typeof incoming.updatedAt === "number" && typeof current.updatedAt === "number") {
-        if (incoming.updatedAt < current.updatedAt) return true;
+    if (hasTimestamps) {
+        return incoming.updatedAt! < current.updatedAt!;
     }
     return false;
 };

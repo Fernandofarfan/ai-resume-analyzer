@@ -22,7 +22,10 @@ const withBackoff = async (
     let lastError;
     for (let i = 0; i < attempts; i++) {
         if (signal?.aborted) {
-            throw new Error("Client aborted request");
+            const abortErr = new Error("Client aborted request");
+            abortErr.name = "AbortError";
+            abortErr.isClientAbort = true;
+            throw abortErr;
         }
         const remaining = deadlineMs - (Date.now() - start);
         if (remaining <= 1000) {
@@ -31,7 +34,12 @@ const withBackoff = async (
         try {
             return await fn(remaining, signal);
         } catch (err) {
-            if (signal?.aborted) throw err;
+            if (signal?.aborted) {
+                // Caller cancelled: never retry, and never count it as a
+                // provider failure (the circuit breaker skips these).
+                err.isClientAbort = true;
+                throw err;
+            }
             lastError = err;
             const status = err?.status;
             if (status !== 429 && !(status >= 500)) throw err;
@@ -84,6 +92,15 @@ const readJsonCapped = async (res, maxBytes) => {
     }
 };
 
+// Response consumer passed to fetchWithTimeout so the body read stays covered by
+// the timeout/cancellation scope while preserving per-provider error messages.
+const readProviderJson = (label) => async (res) => {
+    if (!res.ok) {
+        throw Object.assign(new Error(`${label} API error: ${res.status}`), { status: res.status });
+    }
+    return readJsonCapped(res, MAX_RESPONSE_CHARS);
+};
+
 export const AI_SYSTEM_INSTRUCTION =
     "You are an expert, objective ATS (Applicant Tracking System) and resume evaluator. " +
     "Analyze candidate resumes strictly against the provided requirements. " +
@@ -99,7 +116,7 @@ export const callGemini = async (message, timeoutMs = DEFAULT_TIMEOUT_MS, signal
         options.endpoint ||
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-    const res = await fetchWithTimeout(
+    const data = await fetchWithTimeout(
         endpoint,
         {
             method: "POST",
@@ -119,10 +136,8 @@ export const callGemini = async (message, timeoutMs = DEFAULT_TIMEOUT_MS, signal
         },
         effectiveTimeout,
         signal,
+        readProviderJson("Gemini"),
     );
-    if (!res.ok)
-        throw Object.assign(new Error(`Gemini API error: ${res.status}`), { status: res.status });
-    const data = await readJsonCapped(res, MAX_RESPONSE_CHARS);
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error("Gemini API returned an empty response");
     return text.trim();
@@ -134,7 +149,7 @@ export const callGroq = async (message, timeoutMs = DEFAULT_TIMEOUT_MS, signal, 
     const apiKey = options.apiKey || GROQ_API_KEY;
     const endpoint = options.endpoint || "https://api.groq.com/openai/v1/chat/completions";
 
-    const res = await fetchWithTimeout(
+    const data = await fetchWithTimeout(
         endpoint,
         {
             method: "POST",
@@ -155,10 +170,8 @@ export const callGroq = async (message, timeoutMs = DEFAULT_TIMEOUT_MS, signal, 
         },
         effectiveTimeout,
         signal,
+        readProviderJson("Groq"),
     );
-    if (!res.ok)
-        throw Object.assign(new Error(`Groq API error: ${res.status}`), { status: res.status });
-    const data = await readJsonCapped(res, MAX_RESPONSE_CHARS);
     const text = data.choices?.[0]?.message?.content;
     if (!text) throw new Error("Groq API returned an empty response");
     return text.trim();
@@ -172,7 +185,7 @@ export const callOllama = async (message, timeoutMs = DEFAULT_TIMEOUT_MS, signal
         ? baseEndpoint
         : `${baseEndpoint}/api/generate`;
 
-    const res = await fetchWithTimeout(
+    const data = await fetchWithTimeout(
         url,
         {
             method: "POST",
@@ -188,10 +201,8 @@ export const callOllama = async (message, timeoutMs = DEFAULT_TIMEOUT_MS, signal
         },
         effectiveTimeout,
         signal,
+        readProviderJson("Ollama"),
     );
-    if (!res.ok)
-        throw Object.assign(new Error(`Ollama API error: ${res.status}`), { status: res.status });
-    const data = await readJsonCapped(res, MAX_RESPONSE_CHARS);
     if (!data.response) throw new Error("Ollama returned an empty response");
     return data.response.trim();
 };

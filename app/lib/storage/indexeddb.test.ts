@@ -25,6 +25,7 @@ import {
     getDB,
     MAX_BACKUP_RESUMES,
 } from "./indexeddb";
+import { __setForcedListingFailure } from "./idb";
 import { buildResumeHeader } from "../../domain/resume";
 import type { Resume } from "../../domain/resume";
 import { kvList, kvSet } from "./kv";
@@ -145,6 +146,61 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
         // When both PDF and Image exist
         await saveLocalBlob(imgPath, new Blob(["img"]), "att-check.png");
         expect(await checkAttachmentsStatus(pdfPath, imgPath)).toBe("complete");
+    });
+
+    it("reports whether deleteLocalBlob actually removed a row", async () => {
+        const blobPath = "local://files/delete-report.txt";
+
+        // Missing key: no row existed, so the call must report false.
+        expect(await deleteLocalBlob(blobPath)).toBe(false);
+
+        await saveLocalBlob(blobPath, new Blob(["payload"]), "delete-report.txt");
+        expect(await deleteLocalBlob(blobPath)).toBe(true);
+        expect(await hasLocalBlob(blobPath)).toBe(false);
+    });
+
+    it("keeps live blobs when the resume listing fails", async () => {
+        const pdfPath = "local://resumes/gc-live.pdf";
+        await saveLocalBlob(pdfPath, new Blob(["pdf"]), "gc-live.pdf");
+
+        // Force the resume listing to fail: previously the GC degraded that into
+        // "no resumes exist" and deleted every live blob.
+        __setForcedListingFailure(true);
+        try {
+            const result = await runStorageGarbageCollector(0);
+            // The GC must not delete live data just because the listing failed.
+            expect(await hasLocalBlob(pdfPath)).toBe(true);
+            expect(result.deletedBlobs).toBe(0);
+        } finally {
+            __setForcedListingFailure(false);
+        }
+    });
+
+    it("restores metadata-only resumes that have an empty resumePath", async () => {
+        const res = await importBackupData({
+            version: 2,
+            resumes: [
+                {
+                    entity: {
+                        id: "metadata-only-1",
+                        schemaVersion: 2,
+                        version: 1,
+                        updatedAt: 1,
+                        analyzedAt: 1,
+                        status: "completed",
+                        resumePath: "",
+                        imagePath: "",
+                        companyName: "No Attachment Co",
+                        jobTitle: "Planner",
+                        jobDescription: "Desc",
+                    },
+                },
+            ],
+        });
+
+        expect(res.restored).toBe(1);
+        expect(res.skipped).toBe(0);
+        expect(await hasResumeEntity("metadata-only-1")).toBe(true);
     });
 
     it("performs real CRUD operations on IndexedDB blobs and entities", async () => {
@@ -325,15 +381,20 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
     it("garbage collector deletes unreferenced orphan blobs while keeping active resume blobs", async () => {
         const activePdf = base64ToBlob(SAMPLE_PDF_BASE64);
         const orphanBlob = new Blob(["orphan data"], { type: "text/plain" });
+        // Cover BOTH prune branches: one stale resume with a PDF, one with only an
+        // image, both past the grace period.
         const staleProcessingPdf = base64ToBlob(SAMPLE_PDF_BASE64);
+        const staleImagePng = base64ToBlob(SAMPLE_PNG_BASE64);
 
         const activePath = "local://resumes/active.pdf";
         const orphanPath = "local://resumes/orphan.pdf";
         const staleProcessingPath = "local://resumes/stale.pdf";
+        const staleImagePath = "local://resumes/stale-image.png";
 
         await saveLocalBlob(activePath, activePdf, "active.pdf");
         await saveLocalBlob(orphanPath, orphanBlob, "orphan.pdf");
         await saveLocalBlob(staleProcessingPath, staleProcessingPdf, "stale.pdf");
+        await saveLocalBlob(staleImagePath, staleImagePng, "stale-image.png");
 
         const activeResume: Resume = {
             id: "active-resume",
@@ -363,7 +424,7 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
             processingStartedAt: Date.now() - 100000,
             heartbeatAt: Date.now() - 100000,
             resumePath: staleProcessingPath,
-            imagePath: "",
+            imagePath: staleImagePath,
             companyName: "Stale Co",
             jobTitle: "Role",
             feedback: {
@@ -376,6 +437,19 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
                 skills: { score: 0, tips: [] },
             },
         };
+        // Cover the image-branch of the orphan pass too: a complete active resume
+        // whose image is referenced must keep both blobs.
+        await saveLocalBlob(
+            "local://resumes/active.png",
+            base64ToBlob(SAMPLE_PNG_BASE64),
+            "active.png",
+        );
+        await saveResumeEntity({
+            ...activeResume,
+            id: "active-with-image",
+            imagePath: "local://resumes/active.png",
+        });
+
         await saveResumeEntity(staleResume);
 
         expect(await hasLocalBlob(activePath)).toBe(true);
@@ -383,13 +457,48 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
         expect(await hasResumeEntity("stale-processing-resume")).toBe(true);
 
         const gcRes = await runStorageGarbageCollector(0);
-        expect(gcRes.deletedBlobs).toBe(2); // orphan + stale
+        expect(gcRes.deletedBlobs).toBe(3); // orphan + stale pdf + stale image
         expect(gcRes.deletedOrphanEntities).toBe(1); // stale processing entity
 
         expect(await hasLocalBlob(activePath)).toBe(true);
+        expect(await hasLocalBlob("local://resumes/active.png")).toBe(true);
         expect(await hasLocalBlob(orphanPath)).toBe(false);
         expect(await hasLocalBlob(staleProcessingPath)).toBe(false);
+        expect(await hasLocalBlob(staleImagePath)).toBe(false);
         expect(await hasResumeEntity("stale-processing-resume")).toBe(false);
+    });
+    it("garbage collector skips in-flight processing resumes while pruning abandoned ones", async () => {
+        const liveProcessingPath = "local://resumes/live-processing.pdf";
+        await saveLocalBlob(liveProcessingPath, base64ToBlob(SAMPLE_PDF_BASE64), "live.pdf");
+
+        const liveProcessing: Resume = {
+            id: "live-processing-resume",
+            schemaVersion: 2,
+            version: 1,
+            status: "processing",
+            processingStartedAt: Date.now(),
+            heartbeatAt: Date.now(),
+            resumePath: liveProcessingPath,
+            imagePath: "",
+            companyName: "Live Co",
+            jobTitle: "Role",
+            feedback: {
+                overallScore: 0,
+                source: "heuristic",
+                ATS: { score: 0, tips: [] },
+                toneAndStyle: { score: 0, tips: [] },
+                content: { score: 0, tips: [] },
+                structure: { score: 0, tips: [] },
+                skills: { score: 0, tips: [] },
+            },
+        };
+        await saveResumeEntity(liveProcessing);
+
+        const res = await runStorageGarbageCollector(30 * 60 * 1000);
+        expect(res.deletedOrphanEntities).toBe(0);
+        expect(res.deletedBlobs).toBe(0);
+        expect(await hasResumeEntity("live-processing-resume")).toBe(true);
+        expect(await hasLocalBlob(liveProcessingPath)).toBe(true);
     });
 
     it("garbage collector reconciles index headers with the entity store", async () => {
@@ -398,6 +507,27 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
             "resume:ghost-entity",
             JSON.stringify({ id: "ghost-entity", companyName: "Ghost" }),
         );
+
+        // An example of a live, concluded entity that has attachments: the GC must
+        // leave its blobs alone while reconciling headers.
+        await saveResumeEntity({
+            id: "header-live",
+            schemaVersion: 2,
+            version: 1,
+            resumePath: "local://resumes/header-live.pdf",
+            imagePath: "",
+            companyName: "Live Co",
+            jobTitle: "Live Role",
+            feedback: {
+                overallScore: 80,
+                source: "heuristic",
+                ATS: { score: 80, tips: [] },
+                toneAndStyle: { score: 80, tips: [] },
+                content: { score: 80, tips: [] },
+                structure: { score: 80, tips: [] },
+                skills: { score: 80, tips: [] },
+            },
+        });
 
         // An entity without a header is invisible in the list (header write failed).
         await saveResumeEntity({
@@ -421,10 +551,75 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
 
         const gcRes = await runStorageGarbageCollector(0);
         expect(gcRes.deletedOrphanHeaders).toBe(1);
-        expect(gcRes.repairedHeaders).toBe(1);
+        expect(gcRes.repairedHeaders).toBe(2);
 
-        expect(await kvList("resume:*")).toEqual(["resume:missing-header"]);
+        expect(await kvList("resume:*")).toEqual(["resume:header-live", "resume:missing-header"]);
         expect((await getResumeEntity("missing-header"))?.companyName).toBe("Hidden Co");
+    });
+
+    it("garbage collector keeps a header when its entity still exists", async () => {
+        const entity: Resume = {
+            id: "survivor",
+            schemaVersion: 2,
+            version: 1,
+            resumePath: "",
+            imagePath: "",
+            companyName: "Survivor Co",
+            jobTitle: "Role",
+            feedback: {
+                overallScore: 60,
+                source: "heuristic",
+                ATS: { score: 60, tips: [] },
+                toneAndStyle: { score: 60, tips: [] },
+                content: { score: 60, tips: [] },
+                structure: { score: 60, tips: [] },
+                skills: { score: 60, tips: [] },
+            },
+        };
+        await saveResumeEntity(entity);
+        await kvSet("resume:survivor", JSON.stringify(buildResumeHeader(entity)));
+
+        const gcRes = await runStorageGarbageCollector(0);
+        expect(gcRes.deletedOrphanHeaders).toBe(0);
+        expect(await kvList("resume:*")).toContain("resume:survivor");
+    });
+
+    it("garbage collector re-checks the entity before pruning a stale processing resume", async () => {
+        const path = "local://resumes/rechecked.pdf";
+        await saveLocalBlob(path, base64ToBlob(SAMPLE_PDF_BASE64), "rechecked.pdf");
+
+        const stale: Resume = {
+            id: "recheck-processing",
+            schemaVersion: 2,
+            version: 1,
+            status: "processing",
+            processingStartedAt: Date.now() - 100000,
+            heartbeatAt: Date.now() - 100000,
+            resumePath: path,
+            imagePath: "",
+            companyName: "Recheck Co",
+            jobTitle: "Role",
+            feedback: {
+                overallScore: 0,
+                source: "heuristic",
+                ATS: { score: 0, tips: [] },
+                toneAndStyle: { score: 0, tips: [] },
+                content: { score: 0, tips: [] },
+                structure: { score: 0, tips: [] },
+                skills: { score: 0, tips: [] },
+            },
+        };
+        await saveResumeEntity(stale);
+
+        // The entity is re-read under the lock; if it is no longer processing (or
+        // has a fresh heartbeat) pruning must be skipped. Here the entity vanished
+        // between the listing and the pruning step, which must not throw.
+        await deleteResumeEntity(stale.id);
+        const gcRes = await runStorageGarbageCollector(0);
+
+        // The blob is only removed through the orphan pass, never the prune pass.
+        expect(gcRes.deletedOrphanEntities).toBe(0);
+        expect(await hasLocalBlob(path)).toBe(false);
     });
 
     it("validates local paths and magic bytes correctly", () => {
@@ -552,11 +747,19 @@ describe("IndexedDB Storage & Backup Integration Tests", () => {
             tx.onerror = () => reject(tx.error);
         });
 
-        // Read using getResumeEntity
+        // Read using getResumeEntity: it migrates and persists the entity, and
+        // returns the stored entity so callers get the version to guard with.
         const retrieved = await getResumeEntity(legacyId);
         expect(retrieved).not.toBeNull();
         expect(retrieved?.schemaVersion).toBe(2);
-        expect(retrieved?.version).toBe(1);
         expect(retrieved?.companyName).toBe("Old Corp");
+        expect(typeof retrieved?.version).toBe("number");
+
+        // The migrated entity is persisted, so a second read must not re-migrate
+        // and must not bump the version again.
+        const versionAfterFirstRead = retrieved?.version;
+        const reread = await getResumeEntity(legacyId);
+        expect(reread?.schemaVersion).toBe(2);
+        expect(reread?.version).toBe(versionAfterFirstRead);
     });
 });

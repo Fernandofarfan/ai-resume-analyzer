@@ -18,6 +18,7 @@ import { useDialog } from "~/lib/useDialog";
 import { useResumeList } from "~/lib/hooks/useResumeList";
 import { migrateResumeHeader } from "~/lib/migrations";
 import { notifyResumesChanged, withTabLock } from "~/lib/tabsync";
+import { downloadBlob } from "~/lib/utils";
 
 export function meta(_args: Route.MetaArgs) {
     return [
@@ -133,6 +134,7 @@ export default function Home() {
                         type: "error",
                         message: t.home.exportPasswordTooShort,
                     });
+                    clearImportFeedbackLater();
                     return;
                 }
                 const confirmPassword = window.prompt(t.home.exportPasswordConfirm);
@@ -141,23 +143,29 @@ export default function Home() {
                         type: "error",
                         message: t.home.exportPasswordMismatch,
                     });
+                    clearImportFeedbackLater();
                     return;
                 }
                 outputPayload = await encryptBackupData(data, trimmed);
                 filename = `cvision-backup-encrypted-${new Date().toISOString().slice(0, 10)}.json`;
             }
 
-            const blob = new Blob([JSON.stringify(outputPayload, null, 2)], {
-                type: "application/json",
-            });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
+            downloadBlob(
+                new Blob([JSON.stringify(outputPayload, null, 2)], {
+                    type: "application/json",
+                }),
+                filename,
+            );
         } catch (err) {
             console.error("Backup export failed:", err);
+            setImportFeedback({
+                type: "error",
+                message: t.home.importError.replace(
+                    "{error}",
+                    err instanceof Error ? err.message : String(err),
+                ),
+            });
+            clearImportFeedbackLater();
         } finally {
             setIsExporting(false);
         }
@@ -173,6 +181,7 @@ export default function Home() {
                 type: "error",
                 message: t.home.importError.replace("{error}", "File exceeds maximum size of 55MB"),
             });
+            clearImportFeedbackLater();
             return;
         }
 
@@ -189,6 +198,7 @@ export default function Home() {
                     type: "error",
                     message: t.home.importError.replace("{error}", "Invalid JSON"),
                 });
+                clearImportFeedbackLater();
                 return;
             }
 
@@ -279,18 +289,36 @@ export default function Home() {
         }
         setIsDecrypting(true);
         setDecryptError("");
+        let decryptedJson: unknown;
         try {
-            const decryptedJson = await decryptBackupData(pendingEncryptedBackup, trimmed);
-            setPendingEncryptedBackup(null);
-            setDecryptPassword("");
-            setShowPassword(false);
-            await executeImport(decryptedJson);
+            decryptedJson = await decryptBackupData(pendingEncryptedBackup, trimmed);
         } catch (decryptErr) {
+            // Only decryption failures mean "wrong password / corrupt archive";
+            // import failures below are reported through the normal toast.
             setDecryptError(
                 decryptErr instanceof InvalidPassphraseError
                     ? t.home.importPasswordIncorrect
                     : t.home.importCorruptedArchive,
             );
+            setIsDecrypting(false);
+            return;
+        }
+
+        setPendingEncryptedBackup(null);
+        setDecryptPassword("");
+        setShowPassword(false);
+        try {
+            await executeImport(decryptedJson);
+        } catch (err) {
+            console.error("Failed to import decrypted backup:", err);
+            setImportFeedback({
+                type: "error",
+                message: t.home.importError.replace(
+                    "{error}",
+                    err instanceof Error ? err.message : String(err),
+                ),
+            });
+            clearImportFeedbackLater();
         } finally {
             setIsDecrypting(false);
         }

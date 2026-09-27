@@ -9,10 +9,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Sliding-window + daily quota rate limiter with an in-memory store. Entries
 // are pruned automatically so the map cannot grow without bound.
 export class RateLimiter {
-    constructor({ windowMs = 60_000, maxPerWindow = 10, maxPerDay = 200, now = Date.now } = {}) {
+    constructor({
+        windowMs = 60_000,
+        maxPerWindow = 10,
+        maxPerDay = 200,
+        maxKeys = 10_000,
+        now = Date.now,
+    } = {}) {
         this.windowMs = windowMs;
         this.maxPerWindow = maxPerWindow;
         this.maxPerDay = maxPerDay;
+        this.maxKeys = maxKeys;
         this.now = now;
         this.hits = new Map();
     }
@@ -26,6 +33,12 @@ export class RateLimiter {
         // limit during a 24h window.
         const cap = this.maxPerDay + 1;
         if (list.length > cap) list = list.slice(-cap);
+        // Bound the number of tracked sources as well: spoofed X-Forwarded-For
+        // values must not be able to grow the map with one entry per request.
+        if (!this.hits.has(ip) && this.hits.size >= this.maxKeys) {
+            const oldest = this.hits.keys().next().value;
+            if (oldest !== undefined) this.hits.delete(oldest);
+        }
         this.hits.set(ip, list);
 
         const windowCount = list.filter((ts) => now - ts < this.windowMs).length;
@@ -46,6 +59,11 @@ export class RateLimiter {
         }
     }
 }
+
+// Distinguishes caller-driven cancellations (client went away, timeout budget
+// exhausted by the caller) from genuine provider failures.
+export const isAbortError = (err) =>
+    err?.isClientAbort === true || err?.name === "AbortError" || err?.code === "ABORT_ERR";
 
 // Circuit breaker to avoid cascading provider failures and rapid retry storms.
 export class CircuitBreaker {
@@ -114,13 +132,15 @@ export class CircuitBreaker {
             this.recordSuccess();
             return result;
         } catch (err) {
-            // Do not trip circuit breaker on client-side errors (4xx except 429)
-            const isClientError =
+            // Do not trip circuit breaker on client-side errors:
+            // 4xx (except 429) and client disconnects/cancellations, which say
+            // nothing about the provider's health.
+            const isHttpClientError =
                 typeof err?.status === "number" &&
                 err.status >= 400 &&
                 err.status < 500 &&
                 err.status !== 429;
-            if (!isClientError) {
+            if (!isHttpClientError && !isAbortError(err)) {
                 this.recordFailure();
             }
             throw err;
@@ -134,11 +154,17 @@ export class CircuitBreaker {
 
 // fetch with a hard timeout so a stalled provider can never hold a request open
 // indefinitely, while supporting active cancellation from client disconnection.
+//
+// `consume` (optional) runs *inside* the deadline/cancellation scope, so the
+// response body is covered by the timeout too. Reading the body after this
+// function returned (the previous behaviour) let a provider that flushed
+// headers and then stalled the body hold the request forever.
 export async function fetchWithTimeout(
     url,
     options = {},
     timeoutMs = DEFAULT_TIMEOUT_MS,
     callerSignal,
+    consume,
 ) {
     const controller = new AbortController();
     let isTimeout = false;
@@ -152,13 +178,23 @@ export async function fetchWithTimeout(
         else callerSignal.addEventListener("abort", onAbort, { once: true });
     }
     try {
-        return await fetch(url, { ...options, signal: controller.signal });
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        if (!consume) return response;
+        return await consume(response, controller.signal);
     } catch (err) {
         if (isTimeout) {
             const timeoutErr = new Error("Provider timeout");
             timeoutErr.status = 504;
             timeoutErr.isTimeout = true;
             throw timeoutErr;
+        }
+        if (controller.signal.aborted && !isAbortError(err)) {
+            // The abort may surface as a generic streaming error; normalise it
+            // so callers classify it as a cancellation rather than a failure.
+            const abortErr = new Error("Client aborted request");
+            abortErr.name = "AbortError";
+            abortErr.isClientAbort = true;
+            throw abortErr;
         }
         throw err;
     } finally {

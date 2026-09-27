@@ -67,7 +67,13 @@ export function useDialog(isOpen: boolean, onClose: () => void) {
                 document.body.style.overflow = originalOverflow;
             }
             document.removeEventListener("keydown", onKeyDown);
-            (restoreRef.current as HTMLElement | null)?.focus?.();
+            // Only restore focus to an element that is still attached: when a
+            // nested dialog closed, the previously focused node may be gone and
+            // focusing it would move focus onto a detached/hidden element.
+            const previous = restoreRef.current as HTMLElement | null;
+            if (previous && document.contains(previous)) {
+                previous.focus?.();
+            }
         };
     }, [isOpen]);
 

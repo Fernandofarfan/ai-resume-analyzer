@@ -66,6 +66,9 @@ const ResumeView = () => {
 
     useEffect(() => {
         let cancelled = false;
+        // Cancels the in-flight PDF text extraction when the route unmounts or a
+        // newer load supersedes this one.
+        const abortRef = new AbortController();
         lastFocusLoadRef.current = Date.now();
 
         const loadResume = async () => {
@@ -142,7 +145,7 @@ const ResumeView = () => {
                         const pdfFile = new File([pdfBlob], "resume.pdf", {
                             type: "application/pdf",
                         });
-                        const extracted = await extractPdfText(pdfFile);
+                        const extracted = await extractPdfText(pdfFile, abortRef.signal);
                         if (cancelled || loadSeqRef.current !== seq) return;
                         data.rawText = extracted;
                         textWasExtracted = true;
@@ -221,6 +224,7 @@ const ResumeView = () => {
 
         return () => {
             cancelled = true;
+            abortRef.abort();
             window.removeEventListener("focus", handleFocus);
             if (resumeUrlRef.current) {
                 URL.revokeObjectURL(resumeUrlRef.current);
@@ -500,37 +504,44 @@ const ResumeView = () => {
                             {/* Left Column: PDF Preview (Sticky on desktop) */}
                             <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
                                 <div className="glass-card p-4 rounded-3xl overflow-hidden shadow-lg border border-slate-200/80 dark:border-slate-800/80">
-                                    {imageUrl && resumeUrl ? (
+                                    {imageUrl || resumeUrl ? (
                                         <div className="space-y-3">
-                                            <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
-                                                <a
-                                                    href={resumeUrl}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    title={t.resume.openPdfNewTab}
-                                                >
-                                                    <img
-                                                        src={imageUrl}
-                                                        alt={t.resume.previewTitle}
-                                                        className="w-full h-auto max-h-[600px] object-contain hover:scale-101 transition-transform duration-200"
-                                                    />
-                                                </a>
-                                            </div>
+                                            {imageUrl && (
+                                                <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
+                                                    <a
+                                                        href={resumeUrl || imageUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        title={t.resume.openPdfNewTab}
+                                                    >
+                                                        <img
+                                                            src={imageUrl}
+                                                            alt={t.resume.previewTitle}
+                                                            className="w-full h-auto max-h-[600px] object-contain hover:scale-101 transition-transform duration-200"
+                                                        />
+                                                    </a>
+                                                </div>
+                                            )}
                                             <div className="flex items-center justify-between px-2 text-xs text-slate-500">
                                                 <span>{t.resume.previewTitle}</span>
-                                                <a
-                                                    href={resumeUrl}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
-                                                >
-                                                    {t.resume.openPdfNewTab}
-                                                </a>
+                                                {/* The PDF link no longer depends on the preview
+                                                    image, so a valid PDF is always reachable. */}
+                                                {resumeUrl && (
+                                                    <a
+                                                        href={resumeUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
+                                                    >
+                                                        {t.resume.openPdfNewTab}
+                                                    </a>
+                                                )}
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="h-96 flex items-center justify-center text-slate-400 text-sm">
-                                            {t.resume.loadingPreview}
+                                        <div className="h-96 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm">
+                                            <span>📄</span>
+                                            <span>{t.resume.previewUnavailable}</span>
                                         </div>
                                     )}
                                 </div>
@@ -554,8 +565,9 @@ const ResumeView = () => {
                                         {/* ATS Breakdown */}
                                         <ATS
                                             score={
-                                                activeFeedback.ATS.score ||
-                                                activeFeedback.overallScore
+                                                typeof activeFeedback.ATS.score === "number"
+                                                    ? activeFeedback.ATS.score
+                                                    : activeFeedback.overallScore
                                             }
                                             suggestions={activeFeedback.ATS.tips || []}
                                         />

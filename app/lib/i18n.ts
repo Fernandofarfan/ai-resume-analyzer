@@ -73,6 +73,7 @@ export interface Translations {
         statusAnalyzing: string;
         statusComplete: string;
         stepProgress: string;
+        stepCount: number;
         errorUploadFile: string;
         errorConvertPdf: string;
         errorUploadImage: string;
@@ -122,6 +123,7 @@ export interface Translations {
         previewTitle: string;
         openPdfNewTab: string;
         loadingPreview: string;
+        previewUnavailable: string;
         generatingDiagnosis: string;
         sourceAI: string;
         sourceHeuristic: string;
@@ -283,7 +285,8 @@ export const translations: Record<Language, Translations> = {
             statusPreparing: "Mapeando competencias y requisitos...",
             statusAnalyzing: "Calculando puntuación ATS y analizando vacante...",
             statusComplete: "¡Auditoría completada! Redirigiendo...",
-            stepProgress: "Paso {step} de 5 • Procesando datos",
+            stepProgress: "Paso {step} de 4 • Procesando datos",
+            stepCount: 4,
             errorUploadFile: "Error: No se pudo subir el archivo",
             errorConvertPdf: "Error: No se pudo procesar el PDF",
             errorUploadImage: "Error: Falló la generación de la vista previa",
@@ -349,6 +352,7 @@ export const translations: Record<Language, Translations> = {
             previewTitle: "Vista previa de documento",
             openPdfNewTab: "Abrir PDF en pestaña nueva ↗",
             loadingPreview: "Cargando vista previa...",
+            previewUnavailable: "Vista previa no disponible",
             generatingDiagnosis: "Generando diagnóstico...",
             sourceAI: "Análisis generado por IA",
             sourceHeuristic: "Análisis heurístico local",
@@ -517,7 +521,8 @@ export const translations: Record<Language, Translations> = {
             statusPreparing: "Mapping skills and qualifications...",
             statusAnalyzing: "Computing ATS score & vacancy alignment...",
             statusComplete: "Audit complete! Redirecting...",
-            stepProgress: "Step {step} of 5 • Processing data",
+            stepProgress: "Step {step} of 4 • Processing data",
+            stepCount: 4,
             errorUploadFile: "Error: Could not upload file",
             errorConvertPdf: "Error: Failed to process PDF",
             errorUploadImage: "Error: Failed to generate page preview",
@@ -580,6 +585,7 @@ export const translations: Record<Language, Translations> = {
             previewTitle: "Document Preview",
             openPdfNewTab: "Open PDF in new tab ↗",
             loadingPreview: "Loading preview...",
+            previewUnavailable: "Preview unavailable",
             generatingDiagnosis: "Generating diagnosis...",
             sourceAI: "AI-generated analysis",
             sourceHeuristic: "Local heuristic analysis",

@@ -60,14 +60,22 @@ let activeRequests = 0;
 // Redis/Upstash for multiple replicas).
 let globalDayKey = "";
 let globalCount = 0;
-const withinGlobalBudget = () => {
+const rollGlobalDay = () => {
     const today = new Date().toISOString().slice(0, 10);
     if (today !== globalDayKey) {
         globalDayKey = today;
         globalCount = 0;
     }
+};
+// The budget is charged only once a provider call is actually attempted, so
+// aborted requests and fast-failed (circuit open) ones do not consume quota.
+const hasGlobalBudget = () => {
+    rollGlobalDay();
+    return globalCount < MAX_DAILY_ANALYSES;
+};
+const consumeGlobalBudget = () => {
+    rollGlobalDay();
     globalCount += 1;
-    return globalCount <= MAX_DAILY_ANALYSES;
 };
 
 const sendJson = (res, status, payload) => {
@@ -121,36 +129,56 @@ const COMPRESSIBLE_EXTENSIONS = new Set([".html", ".js", ".mjs", ".css", ".json"
 
 const compressionCache = new Map();
 
-const getCompressedPayload = (filePath, body, acceptEncoding = "") => {
+// Parse Accept-Encoding into token -> q-value so `q=0` (explicitly refused) is
+// honoured instead of being matched by a naive substring check.
+const parseAcceptEncoding = (header) => {
+    const qualities = new Map();
+    for (const part of String(header || "").split(",")) {
+        const [rawToken, ...params] = part.split(";");
+        const token = rawToken.trim().toLowerCase();
+        if (!token) continue;
+        let q = 1;
+        for (const param of params) {
+            const match = /^\s*q\s*=\s*([0-9]*\.?[0-9]+)\s*$/i.exec(param);
+            if (match) {
+                const value = Number(match[1]);
+                q = Number.isFinite(value) ? value : 0;
+            }
+        }
+        if (!qualities.has(token) || q > qualities.get(token)) qualities.set(token, q);
+    }
+    return qualities;
+};
+
+const pickEncoding = (qualities) => {
+    const gzipQ = qualities.get("gzip") ?? 0;
+    const deflateQ = qualities.get("deflate") ?? 0;
+    const wildcardQ = qualities.get("*") ?? 0;
+    const best = Math.max(gzipQ, deflateQ, wildcardQ);
+    if (best <= 0) return null;
+    return deflateQ > gzipQ && deflateQ === best ? "deflate" : "gzip";
+};
+
+const getCompressedPayload = (filePath, body, acceptEncoding = "", mtimeMs = 0) => {
     const ext = extname(filePath).toLowerCase();
     if (!COMPRESSIBLE_EXTENSIONS.has(ext) || body.length < 512) {
         return { data: body, encoding: null };
     }
 
-    const encodings = acceptEncoding.toLowerCase();
-    if (encodings.includes("gzip")) {
-        const cacheKey = `${filePath}:${body.length}:gzip`;
-        let compressed = compressionCache.get(cacheKey);
-        if (!compressed) {
-            compressed = gzipSync(body, { level: 6 });
-            if (compressionCache.size > 200) compressionCache.clear();
-            compressionCache.set(cacheKey, compressed);
-        }
-        return { data: compressed, encoding: "gzip" };
-    }
+    const encoding = pickEncoding(parseAcceptEncoding(acceptEncoding));
+    if (!encoding) return { data: body, encoding: null };
 
-    if (encodings.includes("deflate")) {
-        const cacheKey = `${filePath}:${body.length}:deflate`;
-        let compressed = compressionCache.get(cacheKey);
-        if (!compressed) {
-            compressed = deflateSync(body, { level: 6 });
-            if (compressionCache.size > 200) compressionCache.clear();
-            compressionCache.set(cacheKey, compressed);
-        }
-        return { data: compressed, encoding: "deflate" };
+    // The modification time is part of the key: an in-place replacement that
+    // keeps the same byte length must not serve stale compressed bytes.
+    const cacheKey = `${filePath}:${body.length}:${mtimeMs}:${encoding}`;
+    let compressed = compressionCache.get(cacheKey);
+    if (!compressed) {
+        compressed =
+            encoding === "gzip" ? gzipSync(body, { level: 6 }) : deflateSync(body, { level: 6 });
+        if (compressionCache.size > 200) compressionCache.clear();
+        compressionCache.set(cacheKey, compressed);
     }
-
-    return { data: body, encoding: null };
+    return { data: compressed, encoding };
 };
 
 const serveStatic = async (req, res) => {
@@ -198,6 +226,7 @@ const serveStatic = async (req, res) => {
                 filePath,
                 body,
                 req.headers["accept-encoding"] || "",
+                info.mtimeMs,
             );
             applySecurityHeaders(res);
             const headers = {
@@ -218,8 +247,16 @@ const serveStatic = async (req, res) => {
             }
             return;
         }
-    } catch {
-        // Fall through to the SPA fallback below.
+    } catch (err) {
+        // Only a missing file falls through to the SPA fallback; permission or
+        // I/O failures must surface instead of being masked as "not found".
+        if (err?.code !== "ENOENT") {
+            logError({ path: requestedPath, name: err?.name, message: err?.message });
+            applySecurityHeaders(res);
+            res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+            res.end("Internal Server Error");
+            return;
+        }
     }
 
     // Only fall back to the SPA shell for navigation routes (no file extension).
@@ -234,11 +271,13 @@ const serveStatic = async (req, res) => {
     }
 
     try {
-        const index = await readFile(join(CLIENT_DIR, "index.html"));
+        const indexPath = join(CLIENT_DIR, "index.html");
+        const [index, indexInfo] = await Promise.all([readFile(indexPath), stat(indexPath)]);
         const { data: outputData, encoding } = getCompressedPayload(
             "index.html",
             index,
             req.headers["accept-encoding"] || "",
+            indexInfo.mtimeMs,
         );
         applySecurityHeaders(res);
         const headers = {
@@ -355,7 +394,9 @@ const handleRequest = async (req, res) => {
     }
 
     if (url.pathname === "/api/config") {
-        if (req.method !== "GET") {
+        // HEAD must be accepted wherever GET is (the body is dropped by Node).
+        if (req.method !== "GET" && req.method !== "HEAD") {
+            res.setHeader("Allow", "GET, HEAD");
             sendJson(res, 405, { error: "Method not allowed" });
             return;
         }
@@ -449,7 +490,7 @@ const handleRequest = async (req, res) => {
 
         // 3. The daily AI budget only applies when rate limit and concurrency checks passed
         // and a real external provider will execute; offline requests cost nothing externally.
-        if (AI_PROVIDER !== "offline" && !withinGlobalBudget()) {
+        if (AI_PROVIDER !== "offline" && !hasGlobalBudget()) {
             sendJson(res, 429, { error: "Daily analysis limit reached" });
             return;
         }
@@ -464,6 +505,7 @@ const handleRequest = async (req, res) => {
         req.on("aborted", onClose);
         res.on("close", onClose);
 
+        let chargeBudget = false;
         activeRequests++;
         try {
             const content = await runProvider(message, abortController.signal);
@@ -471,6 +513,7 @@ const handleRequest = async (req, res) => {
                 sendJson(res, 200, { offline: true });
                 return;
             }
+            chargeBudget = true;
 
             // Validate and strictly normalize the provider's payload before returning it,
             // guaranteeing that out-of-range scores, unknown properties, or oversized strings are eliminated.
@@ -495,6 +538,9 @@ const handleRequest = async (req, res) => {
                 sendJson(res, 503, { error: "AI provider is temporarily unavailable" });
                 return;
             }
+            // The provider was really called (timeout, 5xx, invalid payload), so
+            // this request does count against the daily budget.
+            chargeBudget = true;
             if (
                 err?.isTimeout ||
                 err?.status === 504 ||
@@ -509,12 +555,18 @@ const handleRequest = async (req, res) => {
             req.removeListener("close", onClose);
             req.removeListener("aborted", onClose);
             res.removeListener("close", onClose);
+            if (chargeBudget) consumeGlobalBudget();
             activeRequests--;
         }
         return;
     }
 
     if (url.pathname === "/healthz") {
+        if (req.method !== "GET" && req.method !== "HEAD") {
+            res.setHeader("Allow", "GET, HEAD");
+            sendJson(res, 405, { error: "Method not allowed" });
+            return;
+        }
         // Deep readiness signal: still 200 while serving, 503 once the process
         // is saturated so orchestrators stop routing traffic to it.
         const heapUsedMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
@@ -562,12 +614,24 @@ export const requestHandler = async (req, res) => {
 
 export const server = createServer(requestHandler);
 
+// Explicit socket deadlines: the defaults (headers 60s, request 300s) are too
+// generous for a public endpoint and let slow clients hold sockets for minutes.
+server.headersTimeout = 20_000;
+server.requestTimeout = 60_000;
+server.keepAliveTimeout = 65_000;
+
+let shuttingDown = false;
+
 const shutdown = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log(`Received ${signal}, shutting down gracefully...`);
     clearInterval(sweeper);
     server.close(() => {
         process.exit(0);
     });
+    // Idle keep-alive sockets would otherwise keep `close()` pending.
+    server.closeIdleConnections?.();
     // Force exit if connections fail to drain in time.
     setTimeout(() => process.exit(1), 10_000).unref();
 };
@@ -577,12 +641,22 @@ const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.arg
 if (isMain) {
     process.on("SIGTERM", () => shutdown("SIGTERM"));
     process.on("SIGINT", () => shutdown("SIGINT"));
+    // A failing listener (e.g. EADDRINUSE) must not look like a clean exit to a
+    // process supervisor, so fail loudly with a non-zero code.
+    server.on("error", (err) => {
+        logError({ event: "serverError", name: err?.name, message: err?.message });
+        process.exitCode = 1;
+        process.exit(1);
+    });
     // Last-resort guards: log and keep the process alive for in-flight work
-    // instead of dying silently with an opaque stack trace.
+    // instead of dying silently with an opaque stack trace, but make sure the
+    // eventual exit status reflects the failure.
     process.on("unhandledRejection", (reason) => {
+        process.exitCode = 1;
         logError({ event: "unhandledRejection", message: reason?.message ?? String(reason) });
     });
     process.on("uncaughtException", (err) => {
+        process.exitCode = 1;
         logError({ event: "uncaughtException", message: err?.message, stack: err?.stack });
     });
 

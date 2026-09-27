@@ -129,11 +129,20 @@ export const deleteLocalBlob = async (path: string): Promise<boolean> => {
         return new Promise((resolve, reject) => {
             const tx = db.transaction(STORE_FILES, "readwrite");
             const store = tx.objectStore(STORE_FILES);
-            tx.oncomplete = () => resolve(true);
+            let existed = false;
+            tx.oncomplete = () => resolve(existed);
             tx.onabort = () => reject(tx.error ?? new Error("IndexedDB transaction aborted"));
             tx.onerror = () => reject(tx.error ?? new Error("IndexedDB transaction failed"));
-            const req = store.delete(path);
-            req.onerror = () => reject(req.error ?? new Error("Failed to delete blob"));
+            // `delete()` succeeds even for a missing key, so check existence first
+            // and report whether a row was actually removed.
+            const getReq = store.getKey(path);
+            getReq.onsuccess = () => {
+                if (getReq.result === undefined || getReq.result === null) return;
+                existed = true;
+                const delReq = store.delete(path);
+                delReq.onerror = () => reject(delReq.error ?? new Error("Failed to delete blob"));
+            };
+            getReq.onerror = () => reject(getReq.error ?? new Error("Failed to look up blob"));
         });
     } catch {
         return false;
@@ -196,7 +205,7 @@ export const estimateStorageQuota = async (): Promise<StorageEstimateInfo | null
     if (typeof navigator !== "undefined" && navigator.storage?.estimate) {
         try {
             const { usage = 0, quota = 0 } = await navigator.storage.estimate();
-            const percentUsed = quota > 0 ? Math.round((usage / quota) * 100) : 0;
+            const percentUsed = quota > 0 ? Math.min(100, Math.round((usage / quota) * 100)) : 0;
             return {
                 usageBytes: usage,
                 quotaBytes: quota,

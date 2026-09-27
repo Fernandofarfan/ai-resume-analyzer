@@ -39,8 +39,10 @@ interface PdfJsPage {
     getViewport: (opts: { scale: number }) => { width: number; height: number };
     render: (opts: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => {
         promise: Promise<void>;
+        cancel?: () => void;
     };
     getTextContent: () => Promise<{ items: PdfTextItem[] }>;
+    cleanup?: () => void;
 }
 
 interface PdfJsDocument {
@@ -70,7 +72,14 @@ const loadPdfJs = async (): Promise<PdfJsLib> => {
         return lib;
     })();
 
-    return loadPromise;
+    try {
+        return await loadPromise;
+    } catch (err) {
+        // A single transient chunk-load failure must not poison the cache:
+        // without this reset every later parse would reuse the rejected promise.
+        loadPromise = null;
+        throw err;
+    }
 };
 
 const assertNotAborted = (signal?: AbortSignal): void => {
@@ -151,7 +160,26 @@ const renderFirstPage = async (
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
 
-    await page.render({ canvasContext: context, viewport }).promise;
+    const renderTask = page.render({ canvasContext: context, viewport });
+    const onAbort = () => {
+        try {
+            renderTask.cancel?.();
+        } catch {
+            // Already finished.
+        }
+    };
+    if (signal) {
+        if (signal.aborted) {
+            onAbort();
+        } else {
+            signal.addEventListener("abort", onAbort, { once: true });
+        }
+    }
+    try {
+        await renderTask.promise;
+    } finally {
+        signal?.removeEventListener("abort", onAbort);
+    }
     assertNotAborted(signal);
 
     return new Promise<File | null>((resolve) => {
@@ -271,6 +299,10 @@ const extractText = async (
             isScanned,
         });
 
+        // Release the per-page resources eagerly; holding every page until the
+        // document is destroyed spikes memory on long/scanned PDFs.
+        page.cleanup?.();
+
         fullText += pageText + "\n";
 
         if (fullText.length > MAX_TEXT_CHARS) {
@@ -339,13 +371,18 @@ export const processPdf = async (file: File, signal?: AbortSignal): Promise<PdfP
     }
 };
 
-export const extractPdfText = async (file: File): Promise<string> => {
+export const extractPdfText = async (file: File, signal?: AbortSignal): Promise<string> => {
     let pdf: PdfJsDocument | null = null;
     try {
-        pdf = await openPdfDocument(file);
-        const { text } = await extractText(pdf);
+        pdf = await openPdfDocument(file, signal);
+        const { text } = await extractText(pdf, signal);
         return text;
     } catch (err) {
+        // A user cancellation is not a parse failure: let callers distinguish it
+        // from "no extractable text" (scanned PDF).
+        if (signal?.aborted || (err instanceof Error && err.name === "AbortError")) {
+            throw err;
+        }
         console.error("Failed to extract text from PDF:", err);
         return "";
     } finally {

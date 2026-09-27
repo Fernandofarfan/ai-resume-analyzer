@@ -44,6 +44,12 @@ const Upload = () => {
     const [progressStep, setProgressStep] = useState(1);
     const [file, setFile] = useState<File | null>(null);
     const [fileKey, setFileKey] = useState(0);
+    // Controlled so the form survives the unmount/remount that happens when the
+    // progress card is shown, or when an error/cancel brings the form back.
+    const [jobTitleInput, setJobTitleInput] = useState("");
+    const [jobDescriptionInput, setJobDescriptionInput] = useState("");
+    const [companyNameInput, setCompanyNameInput] = useState("");
+    const submittingRef = useRef(false);
     const [consentRequired, setConsentRequired] = useState(false);
     const [consentChecked, setConsentChecked] = useState(false);
     const [requiresAuth, setRequiresAuth] = useState(false);
@@ -120,310 +126,337 @@ const Upload = () => {
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        // Guard against a second submit slipping through before `isProcessing`
+        // is set (the quota check below awaits, leaving the button enabled).
+        if (submittingRef.current) return;
+        submittingRef.current = true;
         setErrorText("");
         setWarningText("");
 
-        if (!file) return;
-        if (consentRequired && !consentChecked) {
-            setErrorText(t.upload.errorConsent);
-            return;
-        }
-
-        // Check available storage before processing
-        const quota = await estimateStorageQuota();
-        if (quota && quota.quotaBytes > 0) {
-            const freeBytes = quota.quotaBytes - quota.usageBytes;
-            if (freeBytes < 15 * 1024 * 1024 || quota.percentUsed >= 98) {
-                setErrorText(t.upload.errorStorageQuota);
+        try {
+            if (!file) return;
+            if (consentRequired && !consentChecked) {
+                setErrorText(t.upload.errorConsent);
                 return;
             }
-        }
 
-        const form = e.currentTarget;
-        const formData = new FormData(form);
-        const jobTitle = ((formData.get("job-title") as string) || "").trim();
-        const jobDescription = ((formData.get("job-description") as string) || "").trim();
-        const companyName = ((formData.get("company-name") as string) || "").trim();
+            // Check available storage before processing
+            const quota = await estimateStorageQuota();
+            if (quota && quota.quotaBytes > 0) {
+                const freeBytes = quota.quotaBytes - quota.usageBytes;
+                if (freeBytes < 15 * 1024 * 1024 || quota.percentUsed >= 98) {
+                    setErrorText(t.upload.errorStorageQuota);
+                    return;
+                }
+            }
 
-        const controller = new AbortController();
-        abortRef.current = controller;
-        const signal = controller.signal;
+            const form = e.currentTarget;
+            const formData = new FormData(form);
+            const jobTitle = ((formData.get("job-title") as string) || "").trim();
+            const jobDescription = ((formData.get("job-description") as string) || "").trim();
+            const companyName = ((formData.get("company-name") as string) || "").trim();
 
-        setIsProcessing(true);
-        setStatusText(t.upload.statusUploading);
-        setProgressStep(1);
+            // Keep the typed fields so a cancel or an error does not force the
+            // user to retype the job description.
+            setJobTitleInput(jobTitle);
+            setJobDescriptionInput(jobDescription);
+            setCompanyNameInput(companyName);
 
-        const createdPaths: string[] = [];
-        let resumeId: string | null = null;
-        let resumeKey: string | null = null;
-        let completed = false;
-        let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+            const controller = new AbortController();
+            abortRef.current = controller;
+            const signal = controller.signal;
 
-        try {
+            setIsProcessing(true);
+            setStatusText(t.upload.statusUploading);
+            setProgressStep(1);
+
+            const createdPaths: string[] = [];
+            let resumeId: string | null = null;
+            let resumeKey: string | null = null;
+            let completed = false;
+            let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
             const uuid = generateUUID();
             resumeId = uuid;
             resumeKey = `resume:${uuid}`;
 
-            const uploadedFile = await fs.upload([file]);
-            if (!uploadedFile) {
-                throw new Error(t.upload.errorUploadFile);
-            }
-            createdPaths.push(uploadedFile.path);
-
-            if (signal.aborted) return;
-
-            const initialEntity: Resume = {
-                id: uuid,
-                schemaVersion: RESUME_SCHEMA_VERSION,
-                jobTitle,
-                companyName,
-                jobDescription,
-                resumePath: uploadedFile.path,
-                imagePath: "",
-                rawText: "",
-                status: "processing",
-                processingStartedAt: Date.now(),
-                heartbeatAt: Date.now(),
-                updatedAt: Date.now(),
-                feedback: { ...EMPTY_FEEDBACK },
-            };
-
-            const initialRes = await saveResumeEntity(initialEntity);
-            if (!initialRes.success) {
-                throw new Error(t.upload.errorSave || "Failed to save initial resume state");
-            }
-            heartbeatInterval = setInterval(async () => {
-                try {
-                    await withTabLock(`resume-write-${uuid}`, async () => {
-                        const current = await getResumeEntity(uuid);
-                        if (current && current.status === "processing") {
-                            await saveResumeEntity({
-                                ...current,
-                                heartbeatAt: Date.now(),
-                                updatedAt: Date.now(),
-                            });
-                        }
-                    });
-                } catch {
-                    // Ignore transient heartbeat save errors
+            try {
+                const uploadedFile = await fs.upload([file]);
+                if (!uploadedFile) {
+                    throw new Error(t.upload.errorUploadFile);
                 }
-            }, 5000);
+                createdPaths.push(uploadedFile.path);
 
-            if (signal.aborted) return;
+                if (signal.aborted) return;
 
-            setStatusText(t.upload.statusConverting);
-            setProgressStep(2);
-
-            const {
-                text: resumeText,
-                image: imageFile,
-                noText,
-                hasMultipleColumns,
-                error: pdfError,
-            } = await processPdf(file, signal);
-            if (signal.aborted) return;
-            if (pdfError) {
-                throw new Error(t.upload.errorConvertPdf);
-            }
-            if (noText) {
-                throw new Error(t.upload.scannedPdfError);
-            }
-            if (hasMultipleColumns) {
-                setWarningText(t.upload.columnsWarning);
-            }
-
-            if (signal.aborted) return;
-
-            let imagePath = "";
-            if (imageFile) {
-                setStatusText(t.upload.statusUploadingImage);
-                const uploadedImage = await fs.upload([imageFile]);
-                if (uploadedImage) {
-                    imagePath = uploadedImage.path;
-                    createdPaths.push(imagePath);
-                }
-            }
-
-            if (signal.aborted) return;
-
-            setStatusText(t.upload.statusPreparing);
-            setProgressStep(3);
-
-            const prompt = prepareInstructions({ resumeText, jobTitle, jobDescription, language });
-
-            setStatusText(t.upload.statusAnalyzing);
-            setProgressStep(4);
-
-            let feedback;
-            let fallbackOccurred = false;
-
-            if (providerStatus === "server-unavailable" || providerMode === "offline") {
-                const fallbackAnalysis = generateResumeFeedback(
-                    { rawText: resumeText, jobTitle, jobDescription },
-                    language,
-                );
-                feedback = {
-                    message: { content: JSON.stringify(fallbackAnalysis) },
-                    source: "heuristic" as const,
-                    fallbackReason:
-                        providerStatus === "server-unavailable"
-                            ? ("offline-mode" as const)
-                            : undefined,
+                const initialEntity: Resume = {
+                    id: uuid,
+                    schemaVersion: RESUME_SCHEMA_VERSION,
+                    jobTitle,
+                    companyName,
+                    jobDescription,
+                    resumePath: uploadedFile.path,
+                    imagePath: "",
+                    rawText: "",
+                    status: "processing",
+                    processingStartedAt: Date.now(),
+                    heartbeatAt: Date.now(),
+                    updatedAt: Date.now(),
+                    feedback: { ...EMPTY_FEEDBACK },
                 };
-            } else {
-                try {
-                    feedback = await ai.feedback(prompt, consentChecked, signal);
-                    if (!feedback || !feedback.message?.content) {
-                        fallbackOccurred = true;
+
+                const initialRes = await saveResumeEntity(initialEntity);
+                if (!initialRes.success) {
+                    throw new Error(t.upload.errorSave || "Failed to save initial resume state");
+                }
+                heartbeatInterval = setInterval(async () => {
+                    try {
+                        await withTabLock(`resume-write-${uuid}`, async () => {
+                            const current = await getResumeEntity(uuid);
+                            if (current && current.status === "processing") {
+                                await saveResumeEntity({
+                                    ...current,
+                                    heartbeatAt: Date.now(),
+                                    updatedAt: Date.now(),
+                                });
+                            }
+                        });
+                    } catch {
+                        // Ignore transient heartbeat save errors
                     }
-                } catch (aiErr) {
-                    if (signal.aborted) throw aiErr;
-                    if (aiErr instanceof ConsentRequiredError || aiErr instanceof UnauthorizedError)
-                        throw aiErr;
-                    console.warn("ai.feedback failed, falling back to local:", aiErr);
-                    fallbackOccurred = true;
+                }, 5000);
+
+                if (signal.aborted) return;
+
+                setStatusText(t.upload.statusConverting);
+                setProgressStep(2);
+
+                const {
+                    text: resumeText,
+                    image: imageFile,
+                    noText,
+                    hasMultipleColumns,
+                    error: pdfError,
+                } = await processPdf(file, signal);
+                if (signal.aborted) return;
+                if (pdfError) {
+                    throw new Error(t.upload.errorConvertPdf);
                 }
-            }
+                if (noText) {
+                    throw new Error(t.upload.scannedPdfError);
+                }
+                if (hasMultipleColumns) {
+                    setWarningText(t.upload.columnsWarning);
+                }
 
-            if (signal.aborted) return;
+                if (signal.aborted) return;
 
-            const feedbackText =
-                typeof feedback?.message?.content === "string" ? feedback.message.content : "";
+                let imagePath = "";
+                if (imageFile) {
+                    setStatusText(t.upload.statusUploadingImage);
+                    const uploadedImage = await fs.upload([imageFile]);
+                    if (uploadedImage) {
+                        imagePath = uploadedImage.path;
+                        createdPaths.push(imagePath);
+                    }
+                }
 
-            const data: Resume = {
-                id: uuid,
-                schemaVersion: RESUME_SCHEMA_VERSION,
-                analyzedAt: Date.now(),
-                updatedAt: Date.now(),
-                resumePath: uploadedFile.path,
-                imagePath,
-                jobTitle,
-                companyName,
-                jobDescription,
-                rawText: resumeText,
-                status: "completed",
-                version: 1,
-                feedback: { ...EMPTY_FEEDBACK },
-            };
+                if (signal.aborted) return;
 
-            const parsed = parseFeedbackText(feedbackText);
-            const wordCount = resumeText ? resumeText.split(/\s+/).filter(Boolean).length : 0;
-            const signals = extractProfileSignals(resumeText);
+                setStatusText(t.upload.statusPreparing);
+                setProgressStep(3);
 
-            if (parsed) {
-                data.feedback = {
-                    ...parsed,
-                    source: feedback?.source ?? "heuristic",
-                    fallbackReason: feedback?.fallbackReason,
-                    confidence: computeConfidence({
-                        wordCount,
-                        targetKeywordCount:
-                            (parsed.keywords?.matching?.length ?? 0) +
-                            (parsed.keywords?.missing?.length ?? 0),
-                        hasJobDescription: !!jobDescription.trim(),
-                        metricCount: signals.quantifiedAchievements,
-                        hasResumeText: !!resumeText,
-                    }),
-                };
-            } else {
-                data.feedback = {
-                    ...generateResumeFeedback(
+                const prompt = prepareInstructions({
+                    resumeText,
+                    jobTitle,
+                    jobDescription,
+                    language,
+                });
+
+                setStatusText(t.upload.statusAnalyzing);
+                setProgressStep(4);
+
+                let feedback;
+                let fallbackOccurred = false;
+
+                if (providerStatus === "server-unavailable" || providerMode === "offline") {
+                    const fallbackAnalysis = generateResumeFeedback(
                         { rawText: resumeText, jobTitle, jobDescription },
                         language,
-                    ),
-                    fallbackReason:
-                        fallbackOccurred || feedback?.fallbackReason
-                            ? "provider-fallback"
-                            : undefined,
-                };
-                if (feedback?.source === "ai") {
-                    setWarningText(t.upload.warningInvalidAI);
+                    );
+                    feedback = {
+                        message: { content: JSON.stringify(fallbackAnalysis) },
+                        source: "heuristic" as const,
+                        fallbackReason:
+                            providerStatus === "server-unavailable"
+                                ? ("offline-mode" as const)
+                                : undefined,
+                    };
+                } else {
+                    try {
+                        feedback = await ai.feedback(prompt, consentChecked, signal);
+                        if (!feedback || !feedback.message?.content) {
+                            fallbackOccurred = true;
+                        }
+                    } catch (aiErr) {
+                        if (signal.aborted) throw aiErr;
+                        if (
+                            aiErr instanceof ConsentRequiredError ||
+                            aiErr instanceof UnauthorizedError
+                        )
+                            throw aiErr;
+                        console.warn("ai.feedback failed, falling back to local:", aiErr);
+                        fallbackOccurred = true;
+                    }
                 }
-            }
 
-            if (heartbeatInterval) {
-                clearInterval(heartbeatInterval);
-                heartbeatInterval = null;
-            }
+                if (signal.aborted) return;
 
-            if (signal.aborted) return;
+                const feedbackText =
+                    typeof feedback?.message?.content === "string" ? feedback.message.content : "";
 
-            // Commit entity + list header under a per-resume mutex so no other
-            // tab can interleave between the two writes.
-            const finalKey = resumeKey;
-            if (!finalKey) {
-                throw new Error(t.upload.errorSave || "Failed to persist completed analysis");
-            }
-            const finalSavedEntity = await withTabLock(`resume-write-${uuid}`, async () => {
-                const commit = async () => {
-                    const current = await getResumeEntity(uuid);
-                    // Adopt the freshest version/updatedAt as the optimistic
-                    // baseline so heartbeat writes never look like stale writes.
-                    const baseline = current
-                        ? {
-                              ...data,
-                              version: current.version,
-                              updatedAt: Math.max(data.updatedAt ?? 0, current.updatedAt ?? 0),
-                          }
-                        : data;
-                    return await saveResumeEntity(baseline, current?.version);
+                const data: Resume = {
+                    id: uuid,
+                    schemaVersion: RESUME_SCHEMA_VERSION,
+                    analyzedAt: Date.now(),
+                    updatedAt: Date.now(),
+                    resumePath: uploadedFile.path,
+                    imagePath,
+                    jobTitle,
+                    companyName,
+                    jobDescription,
+                    rawText: resumeText,
+                    status: "completed",
+                    version: 1,
+                    feedback: { ...EMPTY_FEEDBACK },
                 };
 
-                let saveRes = await commit();
-                // Only reachable when a writer bypassed the mutex; retry once
-                // against the version it observed.
-                if (!saveRes.success && saveRes.reason === "version_mismatch") {
-                    saveRes = await commit();
+                const parsed = parseFeedbackText(feedbackText);
+                const wordCount = resumeText ? resumeText.split(/\s+/).filter(Boolean).length : 0;
+                const signals = extractProfileSignals(resumeText);
+
+                if (parsed) {
+                    data.feedback = {
+                        ...parsed,
+                        source: feedback?.source ?? "heuristic",
+                        fallbackReason: feedback?.fallbackReason,
+                        confidence: computeConfidence({
+                            wordCount,
+                            targetKeywordCount:
+                                (parsed.keywords?.matching?.length ?? 0) +
+                                (parsed.keywords?.missing?.length ?? 0),
+                            hasJobDescription: !!jobDescription.trim(),
+                            metricCount: signals.quantifiedAchievements,
+                            hasResumeText: !!resumeText,
+                        }),
+                    };
+                } else {
+                    data.feedback = {
+                        ...generateResumeFeedback(
+                            { rawText: resumeText, jobTitle, jobDescription },
+                            language,
+                        ),
+                        fallbackReason:
+                            fallbackOccurred || feedback?.fallbackReason
+                                ? "provider-fallback"
+                                : undefined,
+                    };
+                    if (feedback?.source === "ai") {
+                        setWarningText(t.upload.warningInvalidAI);
+                    }
                 }
-                if (!saveRes.success) {
+
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval);
+                    heartbeatInterval = null;
+                }
+
+                if (signal.aborted) return;
+
+                // Commit entity + list header under a per-resume mutex so no other
+                // tab can interleave between the two writes.
+                const finalKey = resumeKey;
+                if (!finalKey) {
                     throw new Error(t.upload.errorSave || "Failed to persist completed analysis");
                 }
-                await kv.set(finalKey, JSON.stringify(buildResumeHeader(saveRes.entity)));
-                return saveRes.entity;
-            });
+                const finalSavedEntity = await withTabLock(`resume-write-${uuid}`, async () => {
+                    const commit = async () => {
+                        const current = await getResumeEntity(uuid);
+                        // Adopt the freshest version/updatedAt as the optimistic
+                        // baseline so heartbeat writes never look like stale writes.
+                        const baseline = current
+                            ? {
+                                  ...data,
+                                  version: current.version,
+                                  updatedAt: Math.max(data.updatedAt ?? 0, current.updatedAt ?? 0),
+                              }
+                            : data;
+                        return await saveResumeEntity(baseline, current?.version);
+                    };
 
-            completed = true;
-            setStatusText(t.upload.statusComplete);
-            notifyResumesChanged({
-                type: "resumes-changed",
-                resumeId: uuid,
-                version: finalSavedEntity.version,
-                updatedAt: finalSavedEntity.updatedAt,
-            });
-            navigate(`/resume/${uuid}`);
-        } catch (err) {
-            if (abortRef.current !== controller) return;
+                    let saveRes = await commit();
+                    // Only reachable when a writer bypassed the mutex; retry once
+                    // against the version it observed.
+                    if (!saveRes.success && saveRes.reason === "version_mismatch") {
+                        saveRes = await commit();
+                    }
+                    if (!saveRes.success) {
+                        throw new Error(
+                            t.upload.errorSave || "Failed to persist completed analysis",
+                        );
+                    }
+                    await kv.set(finalKey, JSON.stringify(buildResumeHeader(saveRes.entity)));
+                    return saveRes.entity;
+                });
 
-            if (err instanceof Error && err.name === "AbortError") {
-                setStatusText("");
-                setProgressStep(1);
-            } else {
-                console.error("Analysis failed:", err);
-                const message =
-                    err instanceof UnauthorizedError
-                        ? t.upload.errorUnauthorized
-                        : err instanceof ConsentRequiredError
-                          ? t.upload.errorConsent
-                          : err instanceof Error
-                            ? err.message
-                            : t.upload.errorAnalyze;
-                setErrorText(message);
-                setStatusText("");
+                // A cancel while the final commit was in flight must not navigate.
+                if (signal.aborted) return;
+                completed = true;
+                setStatusText(t.upload.statusComplete);
+                notifyResumesChanged({
+                    type: "resumes-changed",
+                    resumeId: uuid,
+                    version: finalSavedEntity.version,
+                    updatedAt: finalSavedEntity.updatedAt,
+                });
+                navigate(`/resume/${uuid}`);
+            } catch (err) {
+                if (abortRef.current !== controller) return;
+
+                if (err instanceof Error && err.name === "AbortError") {
+                    setStatusText("");
+                    setProgressStep(1);
+                } else {
+                    console.error("Analysis failed:", err);
+                    const message =
+                        err instanceof UnauthorizedError
+                            ? t.upload.errorUnauthorized
+                            : err instanceof ConsentRequiredError
+                              ? t.upload.errorConsent
+                              : err instanceof Error
+                                ? err.message
+                                : t.upload.errorAnalyze;
+                    setErrorText(message);
+                    setStatusText("");
+                }
+            } finally {
+                if (heartbeatInterval) clearInterval(heartbeatInterval);
+                if (!completed) {
+                    await cleanupBlobs(createdPaths);
+                    if (resumeId) {
+                        await deleteResumeEntity(resumeId);
+                    }
+                    if (resumeKey) {
+                        await kv.delete(resumeKey);
+                    }
+                }
+                if (abortRef.current === controller) {
+                    setIsProcessing(false);
+                }
+                submittingRef.current = false;
             }
         } finally {
-            if (heartbeatInterval) clearInterval(heartbeatInterval);
-            if (!completed) {
-                await cleanupBlobs(createdPaths);
-                if (resumeId) {
-                    await deleteResumeEntity(resumeId);
-                }
-                if (resumeKey) {
-                    await kv.delete(resumeKey);
-                }
-            }
-            if (abortRef.current === controller) {
-                setIsProcessing(false);
-            }
+            submittingRef.current = false;
         }
     };
 
@@ -539,6 +572,8 @@ const Upload = () => {
                                         name="job-title"
                                         id="job-title"
                                         maxLength={120}
+                                        value={jobTitleInput}
+                                        onChange={(e) => setJobTitleInput(e.target.value)}
                                         placeholder={t.upload.jobTitlePlaceholder}
                                     />
                                 </div>
@@ -551,6 +586,8 @@ const Upload = () => {
                                         name="company-name"
                                         id="company-name"
                                         maxLength={120}
+                                        value={companyNameInput}
+                                        onChange={(e) => setCompanyNameInput(e.target.value)}
                                         placeholder={t.upload.companyNamePlaceholder}
                                     />
                                 </div>
@@ -566,6 +603,8 @@ const Upload = () => {
                                     name="job-description"
                                     id="job-description"
                                     maxLength={10000}
+                                    value={jobDescriptionInput}
+                                    onChange={(e) => setJobDescriptionInput(e.target.value)}
                                     placeholder={t.upload.jobDescriptionPlaceholder}
                                 />
                                 <p className="text-[11px] text-slate-400 dark:text-slate-500">

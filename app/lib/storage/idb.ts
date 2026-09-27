@@ -19,6 +19,22 @@ export class StorageTransactionError extends Error {
     }
 }
 
+// Test-only fault injection: `runStorageGarbageCollector` must never treat a
+// failed listing as "there are no resumes", because that deletes live blobs.
+// IndexedDB requests cannot be failed externally, so tests can flag the next
+// `getAll` on a store here.
+let forcedListingFailure = false;
+
+export const __setForcedListingFailure = (value: boolean): void => {
+    forcedListingFailure = value;
+};
+
+export const consumeForcedListingFailure = (): boolean => {
+    const forced = forcedListingFailure;
+    forcedListingFailure = false;
+    return forced;
+};
+
 export const getDB = (): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
         if (typeof indexedDB === "undefined") {

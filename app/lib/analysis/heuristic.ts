@@ -838,7 +838,7 @@ export const analyzeResumeContent = (instructionMessage: string): Feedback => {
 
     let jobTitle = isSpanish ? "Puesto Profesional" : "Professional Role";
     const jobTitleMatch = instructionMessage.match(
-        /(?:The job title is|El título del puesto objetivo es):\s*([^\n\r]*)/i,
+        /(?:Puesto objetivo|Target Role|The job title is|El título del puesto objetivo es):\s*([^\n\r]*)/i,
     );
     if (
         jobTitleMatch &&
@@ -851,9 +851,13 @@ export const analyzeResumeContent = (instructionMessage: string): Feedback => {
 
     // Capture the full multi-line job description up to the next delimiter,
     // instead of only the first line.
-    const jobDescMatch = instructionMessage.match(
-        /(?:The job description is|La descripción de la oferta laboral es):\s*([\s\S]*?)(?=(?:--- |The extracted resume text|El contenido de texto extraído|$))/i,
-    );
+    const jobDescMatch =
+        instructionMessage.match(
+            /<untrusted_job_description>([\s\S]*?)<\/untrusted_job_description>/i,
+        ) ||
+        instructionMessage.match(
+            /(?:The job description is|La descripción de la oferta laboral es):\s*([\s\S]*?)(?=(?:--- |The extracted resume text|El contenido de texto extraído|$))/i,
+        );
     const jobDescription =
         jobDescMatch &&
         jobDescMatch[1]?.trim() &&
@@ -863,9 +867,15 @@ export const analyzeResumeContent = (instructionMessage: string): Feedback => {
             : "";
 
     let rawText = "";
-    const resumeTextMatch = instructionMessage.match(
-        /(?:--- INICIO CONTENIDO CV ---|--- START RESUME CONTENT ---)([\s\S]*?)(?:--- FIN CONTENIDO CV ---|--- END RESUME CONTENT ---)/i,
-    );
+    // The prompt wraps the resume in `<untrusted_resume_content>` blocks; older
+    // prompts used the "--- INICIO CONTENIDO CV ---" markers, both are accepted.
+    const resumeTextMatch =
+        instructionMessage.match(
+            /<untrusted_resume_content>([\s\S]*?)<\/untrusted_resume_content>/i,
+        ) ||
+        instructionMessage.match(
+            /(?:--- INICIO CONTENIDO CV ---|--- START RESUME CONTENT ---)([\s\S]*?)(?:--- FIN CONTENIDO CV ---|--- END RESUME CONTENT ---)/i,
+        );
     if (resumeTextMatch && resumeTextMatch[1]) {
         rawText = resumeTextMatch[1].trim();
     }

@@ -60,54 +60,65 @@ export interface FullBackupPayload {
 }
 
 export const exportAllResumeData = async (): Promise<FullBackupPayload> => {
-    try {
-        const db = await getDB();
-        const rawResumes = await new Promise<Resume[]>((resolve) => {
-            const tx = db.transaction(STORE_RESUMES, "readonly");
-            const store = tx.objectStore(STORE_RESUMES);
-            const req = store.getAll();
-            req.onsuccess = () => resolve((req.result || []) as Resume[]);
-            req.onerror = () => resolve([]);
-        });
+    const db = await getDB();
+    const rawResumes = await new Promise<Resume[]>((resolve, reject) => {
+        const tx = db.transaction(STORE_RESUMES, "readonly");
+        const store = tx.objectStore(STORE_RESUMES);
+        const req = store.getAll();
+        req.onsuccess = () => resolve((req.result || []) as Resume[]);
+        req.onerror = () => reject(req.error ?? new Error("Failed to list resumes"));
+        tx.onabort = () => reject(tx.error ?? new Error("Resume listing aborted"));
+    });
 
-        // Resumes are independent: read their blobs concurrently instead of
-        // paying two round trips per record in sequence.
-        const items: ResumeBackupItem[] = await Promise.all(
-            rawResumes.map(async (resume) => {
-                let pdfBase64: string | undefined;
-                let imageBase64: string | undefined;
+    // Resumes are independent: read their blobs concurrently instead of
+    // paying two round trips per record in sequence.
+    const items: ResumeBackupItem[] = await Promise.all(
+        rawResumes.map(async (resume) => {
+            let pdfBase64: string | undefined;
+            let imageBase64: string | undefined;
 
-                try {
-                    const [pdfBlob, imageBlob] = await Promise.all([
-                        resume.resumePath ? getLocalBlob(resume.resumePath) : undefined,
-                        resume.imagePath ? getLocalBlob(resume.imagePath) : undefined,
-                    ]);
-                    const [pdf, image] = await Promise.all([
-                        pdfBlob ? blobToBase64(pdfBlob) : undefined,
-                        imageBlob ? blobToBase64(imageBlob) : undefined,
-                    ]);
-                    pdfBase64 = pdf;
-                    imageBase64 = image;
-                } catch {
-                    // Ignore individual blob read errors
-                }
+            try {
+                const [pdfBlob, imageBlob] = await Promise.all([
+                    resume.resumePath ? getLocalBlob(resume.resumePath) : undefined,
+                    resume.imagePath ? getLocalBlob(resume.imagePath) : undefined,
+                ]);
+                const [pdf, image] = await Promise.all([
+                    pdfBlob ? blobToBase64(pdfBlob) : undefined,
+                    imageBlob ? blobToBase64(imageBlob) : undefined,
+                ]);
+                pdfBase64 = pdf;
+                imageBase64 = image;
+            } catch {
+                // Ignore individual blob read errors
+            }
 
-                return { entity: resume, pdfBase64, imageBase64 };
-            }),
-        );
+            return { entity: resume, pdfBase64, imageBase64 };
+        }),
+    );
 
-        return {
-            version: 2,
-            exportedAt: Date.now(),
-            resumes: items,
-        };
-    } catch {
-        return {
-            version: 2,
-            exportedAt: Date.now(),
-            resumes: [],
-        };
+    if (items.length > 0 && items.length > MAX_BACKUP_RESUMES) {
+        throw new Error(`Backup exceeds the maximum of ${MAX_BACKUP_RESUMES} resumes`);
     }
+    // Import and decryption reject oversized payloads, so exporting more than the
+    // importer accepts would produce a backup that can never be restored.
+    const totalBytes = items.reduce(
+        (sum, item) =>
+            sum +
+            estimateBase64Bytes(item.pdfBase64 ?? "") +
+            estimateBase64Bytes(item.imageBase64 ?? ""),
+        0,
+    );
+    if (totalBytes > MAX_BACKUP_TOTAL_BYTES) {
+        throw new Error(
+            `Backup payload exceeds the maximum of ${(MAX_BACKUP_TOTAL_BYTES / 1024 / 1024).toFixed(0)} MB`,
+        );
+    }
+
+    return {
+        version: 2,
+        exportedAt: Date.now(),
+        resumes: items,
+    };
 };
 
 const SAFE_LOCAL_PATH_REGEX = /^local:\/\/[a-zA-Z0-9_\-./]+$/;
@@ -275,8 +286,10 @@ export const importBackupData = async (payload: unknown): Promise<ImportBackupRe
             continue;
         }
 
+        // An empty resumePath means "no attachment" (metadata-only record) and is
+        // legitimate; only a non-empty path has to be safe.
         if (
-            !isValidLocalPath(migrated.resumePath) ||
+            (migrated.resumePath && !isValidLocalPath(migrated.resumePath)) ||
             (migrated.imagePath && !isValidLocalPath(migrated.imagePath))
         ) {
             skipped++;
@@ -397,8 +410,18 @@ export const importBackupData = async (payload: unknown): Promise<ImportBackupRe
                         ? crypto.randomUUID()
                         : `res_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
                 targetId = freshId;
-                targetResumePath = `local://resumes/${freshId}.pdf`;
-                targetImagePath = `local://resumes/${freshId}.png`;
+                // Only fabricate a path for an attachment that will actually be
+                // written, so the entity never points at a file that does not exist.
+                targetResumePath = item.pdfBlob ? `local://resumes/${freshId}.pdf` : "";
+                targetImagePath = item.imageBlob ? `local://resumes/${freshId}.png` : "";
+            }
+
+            // Attachments without a stored path still get one so they are reachable.
+            if (item.pdfBlob && !targetResumePath) {
+                targetResumePath = `local://resumes/${targetId}.pdf`;
+            }
+            if (item.imageBlob && !targetImagePath) {
+                targetImagePath = `local://resumes/${targetId}.png`;
             }
 
             item.entity.id = targetId;
