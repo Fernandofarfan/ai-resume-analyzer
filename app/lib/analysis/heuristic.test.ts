@@ -6,7 +6,9 @@ import {
     generateResumeFeedback,
     extractProfileSignals,
     computeConfidence,
+    analyzeResumeContent,
 } from "./heuristic";
+import { prepareInstructions } from "../../../constants";
 
 describe("normalizeText", () => {
     it("lowercases and strips accents", () => {
@@ -200,5 +202,63 @@ describe("evidence-based score calibration", () => {
 
         expect(fb.overallScore).toBeGreaterThanOrEqual(75);
         expect(fb.confidence).toBe("high");
+    });
+});
+
+describe("analyzeResumeContent (offline fallback prompt parsing)", () => {
+    const richResume = `JUAN PEREZ
+Senior Full Stack Engineer
+juan.perez@email.com | +34 600 000 000 | Madrid, Espana
+
+Perfil Profesional:
+Ingeniero de software con mas de 8 anos de experiencia disenando y construyendo aplicaciones web escalables con React, TypeScript, Node.js y GraphQL. Especialista en arquitecturas cloud en AWS y Kubernetes, con liderazgo de equipos de hasta 6 personas.
+
+Experiencia Laboral:
+- Senior Full Stack Engineer, Tech Solutions (2020 - Presente)
+  * Lidere la migracion a Kubernetes y Docker, reduciendo el tiempo de despliegue en un 40%.
+  * Disene y desplegue microservicios en Node.js y GraphQL atendiendo 2M de peticiones diarias.
+- Full Stack Developer, Data Corp (2016 - 2020)
+  * Desarrolle funcionalidades en React, Redux y Node.js con cobertura de pruebas superior al 85%.
+
+Educacion:
+- Licenciatura en Ciencias de la Computacion, Universidad Nacional.
+
+Habilidades Tecnicas:
+- React, TypeScript, Node.js, Docker, Kubernetes, AWS, SQL, GraphQL.`;
+
+    const jobDescription =
+        "Buscamos Senior Full Stack Engineer con experiencia en React, TypeScript, Node.js, Docker y Kubernetes.";
+
+    it("recovers the resume text and job description from the real prompt format", () => {
+        const message = prepareInstructions({
+            jobTitle: "Senior Full Stack Engineer",
+            jobDescription,
+            resumeText: richResume,
+            language: "es",
+        });
+
+        const viaPrompt = analyzeResumeContent(message);
+        const direct = generateResumeFeedback(
+            { rawText: richResume, jobTitle: "Senior Full Stack Engineer", jobDescription },
+            "es",
+        );
+
+        // Parsing must recover the same content the engine receives directly;
+        // when the delimiters do not match, the resume is scored as empty (~13).
+        expect(viaPrompt.overallScore).toBe(direct.overallScore);
+        expect(viaPrompt.overallScore).toBeGreaterThan(50);
+        expect(viaPrompt.source).toBe("heuristic");
+    });
+
+    it("parses the English prompt variant too", () => {
+        const message = prepareInstructions({
+            jobTitle: "Senior Full Stack Engineer",
+            jobDescription,
+            resumeText: richResume,
+            language: "en",
+        });
+
+        const viaPrompt = analyzeResumeContent(message);
+        expect(viaPrompt.overallScore).toBeGreaterThan(50);
     });
 });
